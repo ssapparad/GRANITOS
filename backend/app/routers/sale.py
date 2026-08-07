@@ -5,7 +5,10 @@ from fastapi import APIRouter, HTTPException
 from app.database import get_connection
 from app.schemas.sale import (
     SaleCreate,
-    SaleSummaryResponse
+    SaleSummaryResponse,
+    SaleListResponse,
+    SaleDetailResponse,
+    SaleDetailItem
 )
 
 
@@ -93,13 +96,8 @@ def create_sale(sale: SaleCreate):
             )
 
         # ==========================================
-        # START TRANSACTION
-        # ==========================================
-
-        
-
-        # ==========================================
         # VALIDATE EVERY LOT
+        # (BOTH SQFT AND SLAB COUNT)
         # ==========================================
 
         for item in sale.items:
@@ -110,6 +108,7 @@ def create_sale(sale: SaleCreate):
                     l.lot_id,
                     l.lot_number,
                     l.available_sqft,
+                    l.available_slabs,
                     g.granite_name
                 FROM Lot l
                 INNER JOIN Granite g
@@ -142,8 +141,20 @@ def create_sale(sale: SaleCreate):
                         f'but only {lot["available_sqft"]:.2f} sq.ft is available.'
                     )
                 )
-            
-                    # ==========================================
+
+            if lot["available_slabs"] < item.slabs_sold:
+
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f'{lot["granite_name"]} '
+                        f'(Lot {lot["lot_number"]}): '
+                        f'requested {item.slabs_sold} slabs '
+                        f'but only {lot["available_slabs"]} slabs available.'
+                    )
+                )
+
+        # ==========================================
         # INSERT SALE
         # ==========================================
 
@@ -267,10 +278,8 @@ def create_sale(sale: SaleCreate):
             (sale_id,)
         )
 
-        summary = cursor.fetchone()
+        return cursor.fetchone()
 
-        return summary
-    
     except mysql.connector.Error as err:
 
         if connection:
@@ -287,6 +296,169 @@ def create_sale(sale: SaleCreate):
             status_code=500,
             detail=err.msg
         )
+
+    finally:
+
+        if cursor:
+            cursor.close()
+
+        if connection:
+            connection.close()
+
+
+# ==========================================
+# GET ALL SALES (LIST)
+# ==========================================
+
+@router.get(
+    "/",
+    response_model=list[SaleListResponse]
+)
+def get_sales():
+
+    connection = None
+    cursor = None
+
+    try:
+
+        connection = get_connection()
+        cursor = connection.cursor(dictionary=True)
+
+        cursor.execute(
+            """
+            SELECT
+
+                s.sale_id,
+
+                s.invoice_no,
+
+                c.customer_name,
+
+                s.sale_date,
+
+                SUM(si.slabs_sold) AS total_slabs,
+
+                SUM(si.sqft_sold) AS total_sqft,
+
+                SUM(
+                    si.sqft_sold *
+                    si.negotiated_rate_per_sqft
+                ) AS grand_total
+
+            FROM Sale s
+
+            INNER JOIN Customer c
+                ON s.customer_id = c.customer_id
+
+            INNER JOIN Sale_Item si
+                ON s.sale_id = si.sale_id
+
+            GROUP BY
+                s.sale_id,
+                s.invoice_no,
+                c.customer_name,
+                s.sale_date
+
+            ORDER BY
+                s.sale_date DESC,
+                s.sale_id DESC
+            """
+        )
+
+        return cursor.fetchall()
+
+    finally:
+
+        if cursor:
+            cursor.close()
+
+        if connection:
+            connection.close()
+
+
+# ==========================================
+# GET SALE DETAIL (INVOICE VIEW)
+# ==========================================
+
+@router.get(
+    "/{sale_id}",
+    response_model=SaleDetailResponse
+)
+def get_sale_detail(sale_id: int):
+
+    connection = None
+    cursor = None
+
+    try:
+
+        connection = get_connection()
+        cursor = connection.cursor(dictionary=True)
+
+        cursor.execute(
+            """
+            SELECT
+                s.sale_id,
+                s.invoice_no,
+                c.customer_name,
+                s.sale_date,
+                s.remarks
+            FROM Sale s
+            INNER JOIN Customer c
+                ON s.customer_id = c.customer_id
+            WHERE
+                s.sale_id = %s
+            """,
+            (sale_id,)
+        )
+
+        sale = cursor.fetchone()
+
+        if sale is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Sale not found."
+            )
+
+        cursor.execute(
+            """
+            SELECT
+                g.granite_name,
+                l.lot_number,
+                si.slabs_sold,
+                si.sqft_sold,
+                si.negotiated_rate_per_sqft,
+                (si.sqft_sold * si.negotiated_rate_per_sqft) AS line_total
+            FROM Sale_Item si
+            INNER JOIN Lot l
+                ON si.lot_id = l.lot_id
+            INNER JOIN Granite g
+                ON l.granite_id = g.granite_id
+            WHERE
+                si.sale_id = %s
+            ORDER BY
+                si.sale_item_id
+            """,
+            (sale_id,)
+        )
+
+        items = cursor.fetchall()
+
+        total_slabs = sum(item["slabs_sold"] for item in items)
+        total_sqft = sum(item["sqft_sold"] for item in items)
+        grand_total = sum(item["line_total"] for item in items)
+
+        return {
+            "sale_id": sale["sale_id"],
+            "invoice_no": sale["invoice_no"],
+            "customer_name": sale["customer_name"],
+            "sale_date": sale["sale_date"],
+            "remarks": sale["remarks"],
+            "total_line_items": len(items),
+            "total_slabs": total_slabs,
+            "total_sqft": total_sqft,
+            "grand_total": grand_total,
+            "items": items
+        }
 
     finally:
 

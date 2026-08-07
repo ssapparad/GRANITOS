@@ -153,6 +153,61 @@ def get_lots():
 
 
 # ==========================================
+# GET SINGLE LOT
+# ==========================================
+
+@router.get("/{lot_id}")
+def get_lot(lot_id: int):
+
+    connection = None
+    cursor = None
+
+    try:
+
+        connection = get_connection()
+        cursor = connection.cursor(dictionary=True)
+
+        cursor.execute(
+            """
+            SELECT
+                l.lot_id,
+                g.granite_name,
+                l.lot_number,
+                l.purchase_price_per_sqft,
+                l.total_slabs,
+                l.available_slabs,
+                l.total_sqft,
+                l.available_sqft
+            FROM Lot l
+            INNER JOIN Granite g
+                ON l.granite_id = g.granite_id
+            WHERE
+                l.lot_id = %s
+                AND l.is_active = TRUE
+            """,
+            (lot_id,)
+        )
+
+        lot = cursor.fetchone()
+
+        if lot is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Lot not found."
+            )
+
+        return lot
+
+    finally:
+
+        if cursor:
+            cursor.close()
+
+        if connection:
+            connection.close()
+
+
+# ==========================================
 # UPDATE LOT
 # ==========================================
 
