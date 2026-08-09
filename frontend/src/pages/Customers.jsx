@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import client from '../api/client.js'
+import { useToast } from '../components/ToastProvider.jsx'
+import { useConfirm } from '../components/ConfirmProvider.jsx'
 
 const emptyForm = { customer_name: '', phone: '', address: '' }
 
@@ -8,6 +10,8 @@ export default function Customers() {
   const [form, setForm] = useState(emptyForm)
   const [editingId, setEditingId] = useState(null)
   const [error, setError] = useState('')
+  const showToast = useToast()
+  const confirmAction = useConfirm()
 
   async function loadCustomers() {
     const res = await client.get('/customers/')
@@ -29,8 +33,10 @@ export default function Customers() {
     try {
       if (editingId) {
         await client.put(`/customers/${editingId}`, form)
+        showToast('Customer updated.')
       } else {
         await client.post('/customers/', form)
+        showToast('Customer added.')
       }
       setForm(emptyForm)
       setEditingId(null)
@@ -50,8 +56,10 @@ export default function Customers() {
   }
 
   async function handleDelete(id) {
-    if (!confirm('Deactivate this customer?')) return
+    const confirmed = await confirmAction('Deactivate this customer?')
+    if (!confirmed) return
     await client.delete(`/customers/${id}`)
+    showToast('Customer deactivated.')
     loadCustomers()
   }
 

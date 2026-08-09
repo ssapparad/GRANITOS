@@ -13,8 +13,10 @@ router = APIRouter(
 
 
 # ==========================================
-# HELPER: compute grand_total and amount_paid
-# for a given sale (used by multiple endpoints)
+# HELPER: compute gross/net totals, amount
+# paid, and balance due for a given sale
+# (used by multiple endpoints). grand_total
+# here is NET of returns.
 # ==========================================
 
 def _get_sale_totals(cursor, sale_id: int):
@@ -25,18 +27,28 @@ def _get_sale_totals(cursor, sale_id: int):
             s.sale_id,
             s.invoice_no,
             c.customer_name,
-            COALESCE(SUM(si.sqft_sold * si.negotiated_rate_per_sqft), 0) AS grand_total
+            COALESCE(SUM(si.sqft_sold * si.negotiated_rate_per_sqft), 0) AS gross_total,
+            COALESCE(refund_totals.total_refunded, 0) AS total_refunded
         FROM Sale s
         INNER JOIN Customer c
             ON s.customer_id = c.customer_id
         LEFT JOIN Sale_Item si
             ON s.sale_id = si.sale_id
+        LEFT JOIN (
+            SELECT si2.sale_id, SUM(sr.refund_amount) AS total_refunded
+            FROM Sale_Return sr
+            INNER JOIN Sale_Item si2
+                ON sr.sale_item_id = si2.sale_item_id
+            GROUP BY si2.sale_id
+        ) refund_totals
+            ON s.sale_id = refund_totals.sale_id
         WHERE
             s.sale_id = %s
         GROUP BY
             s.sale_id,
             s.invoice_no,
-            c.customer_name
+            c.customer_name,
+            refund_totals.total_refunded
         """,
         (sale_id,)
     )
@@ -45,6 +57,8 @@ def _get_sale_totals(cursor, sale_id: int):
 
     if sale is None:
         return None
+
+    sale["grand_total"] = sale["gross_total"] - sale["total_refunded"]
 
     cursor.execute(
         """
@@ -210,11 +224,20 @@ def get_sale_balance(sale_id: int):
             "sale_id": sale["sale_id"],
             "invoice_no": sale["invoice_no"],
             "customer_name": sale["customer_name"],
+            "gross_total": sale["gross_total"],
+            "total_refunded": sale["total_refunded"],
             "grand_total": sale["grand_total"],
             "amount_paid": sale["amount_paid"],
             "balance_due": sale["balance_due"],
             "payments": payments
         }
+
+    except mysql.connector.Error as err:
+
+        raise HTTPException(
+            status_code=500,
+            detail=err.msg
+        )
 
     finally:
 
@@ -276,6 +299,22 @@ def get_customer_outstanding(customer_id: int):
         cursor.execute(
             """
             SELECT
+                COALESCE(SUM(sr.refund_amount), 0) AS total_refunded
+            FROM Sale_Return sr
+            INNER JOIN Sale_Item si
+                ON sr.sale_item_id = si.sale_item_id
+            INNER JOIN Sale s
+                ON si.sale_id = s.sale_id
+            WHERE s.customer_id = %s
+            """,
+            (customer_id,)
+        )
+
+        refunded = cursor.fetchone()
+
+        cursor.execute(
+            """
+            SELECT
                 COALESCE(SUM(p.amount), 0) AS total_paid
             FROM Payment p
             INNER JOIN Sale s
@@ -288,6 +327,7 @@ def get_customer_outstanding(customer_id: int):
         paid = cursor.fetchone()
 
         total_billed = billed["total_billed"]
+        total_refunded = refunded["total_refunded"]
         total_paid = paid["total_paid"]
 
         return {
@@ -295,8 +335,15 @@ def get_customer_outstanding(customer_id: int):
             "customer_name": customer["customer_name"],
             "total_billed": total_billed,
             "total_paid": total_paid,
-            "total_outstanding": total_billed - total_paid
+            "total_outstanding": total_billed - total_refunded - total_paid
         }
+
+    except mysql.connector.Error as err:
+
+        raise HTTPException(
+            status_code=500,
+            detail=err.msg
+        )
 
     finally:
 
@@ -345,6 +392,13 @@ def get_all_payments():
         )
 
         return cursor.fetchall()
+
+    except mysql.connector.Error as err:
+
+        raise HTTPException(
+            status_code=500,
+            detail=err.msg
+        )
 
     finally:
 

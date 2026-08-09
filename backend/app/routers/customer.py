@@ -23,7 +23,7 @@ def add_customer(customer: CustomerCreate):
     try:
 
         connection = get_connection()
-        cursor = connection.cursor()
+        cursor = connection.cursor(dictionary=True)
 
         cursor.execute(
             """
@@ -38,11 +38,24 @@ def add_customer(customer: CustomerCreate):
             )
         )
 
+        customer_id = cursor.lastrowid
+
         connection.commit()
 
-        return {
-            "message": "Customer added successfully!"
-        }
+        cursor.execute(
+            """
+            SELECT customer_id, customer_name, phone, address
+            FROM Customer
+            WHERE customer_id = %s
+            """,
+            (customer_id,)
+        )
+
+        created_customer = cursor.fetchone()
+
+        created_customer["message"] = "Customer added successfully!"
+
+        return created_customer
 
     except mysql.connector.Error as err:
 
@@ -87,6 +100,13 @@ def get_customers():
         )
 
         return cursor.fetchall()
+
+    except mysql.connector.Error as err:
+
+        raise HTTPException(
+            status_code=500,
+            detail=err.msg
+        )
 
     finally:
 

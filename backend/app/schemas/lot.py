@@ -1,3 +1,4 @@
+from datetime import date
 from decimal import Decimal
 
 from pydantic import BaseModel, Field
@@ -14,6 +15,8 @@ class LotCreate(BaseModel):
         min_length=1,
         max_length=50
     )
+
+    purchase_date: date
 
     purchase_price_per_sqft: Decimal = Field(gt=0)
 
@@ -46,6 +49,8 @@ class LotResponse(BaseModel):
     granite_name: str
 
     lot_number: str
+
+    purchase_date: date
 
     purchase_price_per_sqft: Decimal
 

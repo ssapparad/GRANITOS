@@ -46,6 +46,9 @@ class PaymentResponse(BaseModel):
 
 # ==========================================
 # Sale Balance (invoice + payment history)
+# grand_total here is NET of returns — the
+# actual amount owed. gross_total is the
+# original, unadjusted invoice total.
 # ==========================================
 
 class SaleBalanceResponse(BaseModel):
@@ -54,6 +57,10 @@ class SaleBalanceResponse(BaseModel):
     invoice_no: str
 
     customer_name: str
+
+    gross_total: Decimal
+
+    total_refunded: Decimal
 
     grand_total: Decimal
 

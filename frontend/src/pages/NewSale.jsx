@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import client from '../api/client.js'
+import { useToast } from '../components/ToastProvider.jsx'
 
 const emptyItem = { lot_id: '', slabs_sold: '', sqft_sold: '', negotiated_rate_per_sqft: '' }
+const emptyCustomerForm = { customer_name: '', phone: '', address: '' }
 
 export default function NewSale() {
   const navigate = useNavigate()
+  const showToast = useToast()
 
   const [customers, setCustomers] = useState([])
   const [lots, setLots] = useState([])
@@ -14,18 +17,27 @@ export default function NewSale() {
   const [customerId, setCustomerId] = useState('')
   const [saleDate, setSaleDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [remarks, setRemarks] = useState('')
+  const [commission, setCommission] = useState('')
+  const [loadingCharge, setLoadingCharge] = useState('')
   const [items, setItems] = useState([{ ...emptyItem }])
   const [error, setError] = useState('')
+
+  const [showNewCustomer, setShowNewCustomer] = useState(false)
+  const [newCustomerForm, setNewCustomerForm] = useState(emptyCustomerForm)
+  const [newCustomerError, setNewCustomerError] = useState('')
 
   useEffect(() => {
     client.get('/customers/').then((res) => setCustomers(res.data))
     client.get('/lots/').then((res) => setLots(res.data))
+    client.get('/settings/').then((res) => {
+      if (res.data.invoice_prefix) {
+        setInvoiceNo((prev) => (prev === '' ? res.data.invoice_prefix : prev))
+      }
+    })
   }, [])
 
   function updateItem(index, field, value) {
-    setItems((prev) =>
-      prev.map((item, i) => (i === index ? { ...item, [field]: value } : item))
-    )
+    setItems((prev) => prev.map((item, i) => (i === index ? { ...item, [field]: value } : item)))
   }
 
   function addItemRow() {
@@ -36,16 +48,43 @@ export default function NewSale() {
     setItems((prev) => prev.filter((_, i) => i !== index))
   }
 
+  function updateNewCustomerField(field, value) {
+    setNewCustomerForm((prev) => ({ ...prev, [field]: value }))
+  }
+
+  async function handleAddCustomer(e) {
+    e.preventDefault()
+    setNewCustomerError('')
+
+    try {
+      const res = await client.post('/customers/', newCustomerForm)
+      setCustomers((prev) => [...prev, res.data])
+      setCustomerId(String(res.data.customer_id))
+      setShowNewCustomer(false)
+      setNewCustomerForm(emptyCustomerForm)
+      showToast('Customer added.')
+    } catch (err) {
+      setNewCustomerError(err.response?.data?.detail || 'Something went wrong.')
+    }
+  }
+
   async function handleSubmit(e) {
     e.preventDefault()
     setError('')
 
+    if (invoiceNo.trim() === '') {
+      setError('Invoice number is required.')
+      return
+    }
+
     try {
       const res = await client.post('/sales/', {
-        invoice_no: invoiceNo,
+        invoice_no: invoiceNo.trim(),
         customer_id: Number(customerId),
         sale_date: saleDate,
         remarks: remarks || null,
+        commission: commission ? Number(commission) : null,
+        loading_charge: loadingCharge ? Number(loadingCharge) : null,
         items: items.map((item) => ({
           lot_id: Number(item.lot_id),
           slabs_sold: Number(item.slabs_sold),
@@ -73,17 +112,28 @@ export default function NewSale() {
             required
             className="border border-stone-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400"
           />
-          <select
-            value={customerId}
-            onChange={(e) => setCustomerId(e.target.value)}
-            required
-            className="border border-stone-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400"
-          >
-            <option value="">Customer</option>
-            {customers.map((c) => (
-              <option key={c.customer_id} value={c.customer_id}>{c.customer_name}</option>
-            ))}
-          </select>
+
+          <div>
+            <select
+              value={customerId}
+              onChange={(e) => setCustomerId(e.target.value)}
+              required
+              className="w-full border border-stone-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400"
+            >
+              <option value="">Customer</option>
+              {customers.map((c) => (
+                <option key={c.customer_id} value={c.customer_id}>{c.customer_name}</option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={() => setShowNewCustomer((prev) => !prev)}
+              className="text-xs text-stone-500 hover:underline mt-1"
+            >
+              {showNewCustomer ? 'Cancel' : '+ New customer'}
+            </button>
+          </div>
+
           <input
             type="date"
             value={saleDate}
@@ -93,13 +143,69 @@ export default function NewSale() {
           />
         </div>
 
-        <input
-          type="text"
-          value={remarks}
-          onChange={(e) => setRemarks(e.target.value)}
-          placeholder="Remarks (optional)"
-          className="w-full border border-stone-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400"
-        />
+        {showNewCustomer && (
+          <div className="bg-stone-50 border border-stone-200 rounded-md p-4 space-y-2">
+            <h4 className="text-sm font-medium text-stone-700">New Customer</h4>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <input
+                type="text"
+                value={newCustomerForm.customer_name}
+                onChange={(e) => updateNewCustomerField('customer_name', e.target.value)}
+                placeholder="Customer name"
+                required
+                className="border border-stone-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400"
+              />
+              <input
+                type="text"
+                value={newCustomerForm.phone}
+                onChange={(e) => updateNewCustomerField('phone', e.target.value)}
+                placeholder="Phone"
+                className="border border-stone-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400"
+              />
+              <input
+                type="text"
+                value={newCustomerForm.address}
+                onChange={(e) => updateNewCustomerField('address', e.target.value)}
+                placeholder="Address"
+                className="border border-stone-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400"
+              />
+            </div>
+            {newCustomerError && <p className="text-red-600 text-sm">{newCustomerError}</p>}
+            <button
+              type="button"
+              onClick={handleAddCustomer}
+              className="bg-stone-800 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-stone-700"
+            >
+              Save Customer
+            </button>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <input
+            type="text"
+            value={remarks}
+            onChange={(e) => setRemarks(e.target.value)}
+            placeholder="Remarks (optional)"
+            className="border border-stone-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400"
+          />
+          <input
+            type="number"
+            step="0.01"
+            value={commission}
+            onChange={(e) => setCommission(e.target.value)}
+            placeholder="Commission (optional)"
+            className="border border-stone-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400"
+          />
+          <input
+            type="number"
+            step="0.01"
+            value={loadingCharge}
+            onChange={(e) => setLoadingCharge(e.target.value)}
+            placeholder="Loading charge (optional)"
+            className="border border-stone-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400"
+          />
+        </div>
 
         <div className="space-y-2">
           <h3 className="text-sm font-medium text-stone-700">Items</h3>

@@ -1,11 +1,15 @@
 import { useEffect, useState } from 'react'
 import client from '../api/client.js'
+import { useToast } from '../components/ToastProvider.jsx'
+import { useConfirm } from '../components/ConfirmProvider.jsx'
 
 export default function Granites() {
   const [granites, setGranites] = useState([])
   const [name, setName] = useState('')
   const [editingId, setEditingId] = useState(null)
   const [error, setError] = useState('')
+  const showToast = useToast()
+  const confirmAction = useConfirm()
 
   async function loadGranites() {
     const res = await client.get('/granites/')
@@ -23,8 +27,10 @@ export default function Granites() {
     try {
       if (editingId) {
         await client.put(`/granites/${editingId}`, { granite_name: name })
+        showToast('Granite updated.')
       } else {
         await client.post('/granites/', { granite_name: name })
+        showToast('Granite added.')
       }
       setName('')
       setEditingId(null)
@@ -40,8 +46,10 @@ export default function Granites() {
   }
 
   async function handleDelete(id) {
-    if (!confirm('Deactivate this granite?')) return
+    const confirmed = await confirmAction('Deactivate this granite?')
+    if (!confirmed) return
     await client.delete(`/granites/${id}`)
+    showToast('Granite deactivated.')
     loadGranites()
   }
 
