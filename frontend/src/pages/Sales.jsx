@@ -1,49 +1,71 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { PlusCircle, Receipt } from 'lucide-react'
 import client from '../api/client.js'
+import PageHeader from '../components/PageHeader.jsx'
+import Button from '../components/Button.jsx'
 
 export default function Sales() {
   const [sales, setSales] = useState([])
+  const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {
-    client.get('/sales/').then((res) => setSales(res.data))
+    client.get('/sales/').then((res) => {
+      setSales(res.data)
+      setLoaded(true)
+    })
   }, [])
 
   return (
     <div>
-      <h2 className="text-lg font-semibold text-stone-900 mb-4">Sales</h2>
+      <PageHeader
+        title="Invoices"
+        subtitle="Every sale recorded at the showroom"
+        action={<Button to="/sales/new" icon={PlusCircle}>New Sale</Button>}
+      />
 
-      <div className="bg-white border border-stone-200 rounded-md overflow-hidden">
+      <div className="bg-white border border-line rounded-xl overflow-hidden shadow-card">
         <table className="w-full text-sm">
-          <thead className="bg-stone-100 text-stone-600 text-left">
+          <thead className="bg-canvas text-ink-muted text-left">
             <tr>
-              <th className="px-4 py-2">Invoice #</th>
-              <th className="px-4 py-2">Customer</th>
-              <th className="px-4 py-2">Date</th>
-              <th className="px-4 py-2">Slabs</th>
-              <th className="px-4 py-2">Sqft</th>
-              <th className="px-4 py-2">Total</th>
+              <th className="px-4 py-2.5 font-medium">Invoice #</th>
+              <th className="px-4 py-2.5 font-medium">Customer</th>
+              <th className="px-4 py-2.5 font-medium">Date</th>
+              <th className="px-4 py-2.5 font-medium">Slabs</th>
+              <th className="px-4 py-2.5 font-medium">Sqft</th>
+              <th className="px-4 py-2.5 font-medium text-right">Total</th>
             </tr>
           </thead>
           <tbody>
             {sales.map((s) => (
-              <tr key={s.sale_id} className="border-t border-stone-100 hover:bg-stone-50">
-                <td className="px-4 py-2">
-                  <Link to={`/sales/${s.sale_id}`} className="text-stone-800 font-medium hover:underline">
+              <tr key={s.sale_id} className="border-t border-line-soft hover:bg-canvas/60 transition-colors">
+                <td className="px-4 py-2.5">
+                  <Link
+                    to={`/sales/${s.sale_id}`}
+                    className="text-ink font-medium hover:text-emerald-700"
+                  >
                     {s.invoice_no}
                   </Link>
                 </td>
-                <td className="px-4 py-2 text-stone-600">{s.customer_name}</td>
-                <td className="px-4 py-2 text-stone-600">{s.sale_date}</td>
-                <td className="px-4 py-2 text-stone-600">{s.total_slabs}</td>
-                <td className="px-4 py-2 text-stone-600">{s.total_sqft}</td>
-                <td className="px-4 py-2 text-stone-800 font-medium">₹{s.grand_total}</td>
+                <td className="px-4 py-2.5 text-ink-muted">{s.customer_name}</td>
+                <td className="px-4 py-2.5 text-ink-muted">{s.sale_date}</td>
+                <td className="px-4 py-2.5 text-ink-muted">{s.total_slabs}</td>
+                <td className="px-4 py-2.5 text-ink-muted">{s.total_sqft}</td>
+                <td className="px-4 py-2.5 text-ink font-medium text-right">₹{s.grand_total}</td>
               </tr>
             ))}
-            {sales.length === 0 && (
+            {loaded && sales.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-stone-400">
-                  No sales yet.
+                <td colSpan={6} className="px-4 py-14">
+                  <div className="flex flex-col items-center gap-3 text-center">
+                    <div className="w-10 h-10 rounded-full bg-canvas flex items-center justify-center">
+                      <Receipt size={18} className="text-ink-faint" strokeWidth={2} />
+                    </div>
+                    <p className="text-sm text-ink-muted">No sales recorded yet.</p>
+                    <Button to="/sales/new" size="sm" icon={PlusCircle}>
+                      Record your first sale
+                    </Button>
+                  </div>
                 </td>
               </tr>
             )}
