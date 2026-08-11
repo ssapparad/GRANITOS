@@ -1,4 +1,5 @@
 import mysql.connector
+from datetime import date, timedelta
 from decimal import Decimal
 
 from fastapi import APIRouter, HTTPException
@@ -13,6 +14,9 @@ router = APIRouter(
 
 VELOCITY_MIN_LOT_AGE_DAYS = 7
 LOW_STOCK_SQFT_THRESHOLD = Decimal("100")
+MONTHLY_TREND_MONTHS = 12
+PAYMENT_BREAKDOWN_DAYS = 30
+TOP_GRANITES_LIMIT = 5
 
 
 # ==========================================
@@ -258,6 +262,126 @@ def get_dashboard_summary(
 
         recent_sales = cursor.fetchall()
 
+        # ==========================================
+        # 7-DAY SALES TREND
+        # (real comparison: trailing 7 days vs the
+        # 7 days before that — used for the dashboard
+        # trend badge, never a fabricated number)
+        # ==========================================
+
+        cursor.execute(
+            """
+            SELECT
+                COALESCE(SUM(
+                    CASE WHEN s.sale_date >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+                    THEN si.sqft_sold * si.negotiated_rate_per_sqft ELSE 0 END
+                ), 0) AS last_7_days_total,
+                COALESCE(SUM(
+                    CASE WHEN s.sale_date >= DATE_SUB(CURDATE(), INTERVAL 13 DAY)
+                        AND s.sale_date < DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+                    THEN si.sqft_sold * si.negotiated_rate_per_sqft ELSE 0 END
+                ), 0) AS prior_7_days_total
+            FROM Sale s
+            INNER JOIN Sale_Item si ON s.sale_id = si.sale_id
+            WHERE s.sale_date >= DATE_SUB(CURDATE(), INTERVAL 13 DAY)
+            """
+        )
+
+        trend_row = cursor.fetchone()
+
+        last_7 = trend_row["last_7_days_total"]
+        prior_7 = trend_row["prior_7_days_total"]
+
+        percent_change = None
+        if prior_7 > 0:
+            percent_change = round(((last_7 - prior_7) / prior_7) * 100, 1)
+
+        sales_trend_7d = {
+            "last_7_days_total": last_7,
+            "prior_7_days_total": prior_7,
+            "percent_change": percent_change
+        }
+
+        # ==========================================
+        # MONTHLY SALES TREND (last 12 months)
+        # Gaps are filled with zero in Python so the
+        # chart always shows a continuous 12-month axis.
+        # ==========================================
+
+        cursor.execute(
+            """
+            SELECT
+                DATE_FORMAT(s.sale_date, '%%Y-%%m') AS month,
+                COALESCE(SUM(si.sqft_sold * si.negotiated_rate_per_sqft), 0) AS total_sales
+            FROM Sale s
+            INNER JOIN Sale_Item si ON s.sale_id = si.sale_id
+            WHERE s.sale_date >= DATE_SUB(CURDATE(), INTERVAL %s MONTH)
+            GROUP BY month
+            ORDER BY month
+            """,
+            (MONTHLY_TREND_MONTHS - 1,)
+        )
+
+        monthly_rows = {row["month"]: row["total_sales"] for row in cursor.fetchall()}
+
+        monthly_sales_trend = []
+        today = date.today()
+        cursor_month = today.replace(day=1)
+
+        month_sequence = []
+        for i in range(MONTHLY_TREND_MONTHS):
+            month_sequence.append(cursor_month)
+            if cursor_month.month == 1:
+                cursor_month = cursor_month.replace(year=cursor_month.year - 1, month=12)
+            else:
+                cursor_month = cursor_month.replace(month=cursor_month.month - 1)
+
+        for month_date in reversed(month_sequence):
+            key = month_date.strftime("%Y-%m")
+            monthly_sales_trend.append({
+                "month": key,
+                "total_sales": monthly_rows.get(key, Decimal("0"))
+            })
+
+        # ==========================================
+        # PAYMENT METHOD BREAKDOWN (last 30 days)
+        # ==========================================
+
+        cursor.execute(
+            """
+            SELECT
+                payment_method,
+                COALESCE(SUM(amount), 0) AS total
+            FROM Payment
+            WHERE payment_date >= DATE_SUB(CURDATE(), INTERVAL %s DAY)
+            GROUP BY payment_method
+            """,
+            (PAYMENT_BREAKDOWN_DAYS,)
+        )
+
+        payment_method_breakdown = cursor.fetchall()
+
+        # ==========================================
+        # TOP GRANITES BY REVENUE (all-time)
+        # ==========================================
+
+        cursor.execute(
+            """
+            SELECT
+                g.granite_name,
+                COALESCE(SUM(si.sqft_sold * si.negotiated_rate_per_sqft), 0) AS revenue
+            FROM Sale_Item si
+            INNER JOIN Lot l ON si.lot_id = l.lot_id
+            INNER JOIN Granite g ON l.granite_id = g.granite_id
+            GROUP BY g.granite_name
+            ORDER BY revenue DESC
+            LIMIT %s
+            """,
+            (TOP_GRANITES_LIMIT,)
+        )
+
+        top_granites_by_revenue = cursor.fetchall()
+
         return {
             "todays_sales_count": todays_sales["todays_sales_count"],
             "todays_sales_total": todays_sales["todays_sales_total"],
@@ -272,7 +396,11 @@ def get_dashboard_summary(
             "low_stock_lots": low_stock_lots,
             "fast_moving_granites": fast_moving_granites,
             "slow_moving_granites": slow_moving_granites,
-            "recent_sales": recent_sales
+            "recent_sales": recent_sales,
+            "sales_trend_7d": sales_trend_7d,
+            "monthly_sales_trend": monthly_sales_trend,
+            "payment_method_breakdown": payment_method_breakdown,
+            "top_granites_by_revenue": top_granites_by_revenue
         }
 
     except mysql.connector.Error as err:

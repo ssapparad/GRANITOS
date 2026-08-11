@@ -1,6 +1,6 @@
 from datetime import date
 from decimal import Decimal
-from typing import List
+from typing import List, Optional
 
 from pydantic import BaseModel
 
@@ -59,6 +59,57 @@ class DashboardRecentSale(BaseModel):
 
 
 # ==========================================
+# Monthly Sales Trend Point
+# ==========================================
+
+class DashboardMonthlySales(BaseModel):
+    month: str  # "YYYY-MM"
+
+    total_sales: Decimal
+
+    class Config:
+        from_attributes = True
+
+
+# ==========================================
+# Payment Method Breakdown
+# ==========================================
+
+class DashboardPaymentBreakdown(BaseModel):
+    payment_method: str
+
+    total: Decimal
+
+    class Config:
+        from_attributes = True
+
+
+# ==========================================
+# Top Granite By Revenue
+# ==========================================
+
+class DashboardGraniteRevenue(BaseModel):
+    granite_name: str
+
+    revenue: Decimal
+
+    class Config:
+        from_attributes = True
+
+
+# ==========================================
+# Sales Trend (7-day comparison)
+# ==========================================
+
+class DashboardSalesTrend(BaseModel):
+    last_7_days_total: Decimal
+
+    prior_7_days_total: Decimal
+
+    percent_change: Optional[Decimal] = None
+
+
+# ==========================================
 # Dashboard Summary
 # ==========================================
 
@@ -83,3 +134,8 @@ class DashboardSummaryResponse(BaseModel):
     slow_moving_granites: List[DashboardGraniteVelocity]
 
     recent_sales: List[DashboardRecentSale]
+
+    sales_trend_7d: DashboardSalesTrend
+    monthly_sales_trend: List[DashboardMonthlySales]
+    payment_method_breakdown: List[DashboardPaymentBreakdown]
+    top_granites_by_revenue: List[DashboardGraniteRevenue]
