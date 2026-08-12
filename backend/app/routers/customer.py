@@ -10,13 +10,20 @@ router = APIRouter(
 )
 
 
+# ==========================================
 # CREATE
+# ==========================================
+
 @router.post("/")
 def add_customer(customer: CustomerCreate):
 
+    connection = None
+    cursor = None
+
     try:
+
         connection = get_connection()
-        cursor = connection.cursor()
+        cursor = connection.cursor(dictionary=True)
 
         cursor.execute(
             """
@@ -31,104 +38,201 @@ def add_customer(customer: CustomerCreate):
             )
         )
 
+        customer_id = cursor.lastrowid
+
         connection.commit()
 
-        cursor.close()
-        connection.close()
-
-        return {
-            "message": "Customer added successfully!"
-        }
-
-    except mysql.connector.Error as err:
-        raise HTTPException(
-            status_code=500,
-            detail=f"MySQL Error {err.errno}: {err.msg}"
+        cursor.execute(
+            """
+            SELECT customer_id, customer_name, phone, address
+            FROM Customer
+            WHERE customer_id = %s
+            """,
+            (customer_id,)
         )
 
+        created_customer = cursor.fetchone()
+
+        created_customer["message"] = "Customer added successfully!"
+
+        return created_customer
+
+    except mysql.connector.Error as err:
+
+        if connection:
+            connection.rollback()
+
+        raise HTTPException(
+            status_code=500,
+            detail=err.msg
+        )
+
+    finally:
+
+        if cursor:
+            cursor.close()
+
+        if connection:
+            connection.close()
+
+
+# ==========================================
 # READ
+# ==========================================
+
 @router.get("/")
 def get_customers():
 
-    connection = get_connection()
+    connection = None
+    cursor = None
 
-    cursor = connection.cursor(dictionary=True)
+    try:
 
-    cursor.execute(
-        """
-        SELECT *
-        FROM Customer
-        WHERE is_active = TRUE
-        """
-    )
+        connection = get_connection()
+        cursor = connection.cursor(dictionary=True)
 
-    customers = cursor.fetchall()
+        cursor.execute(
+            """
+            SELECT *
+            FROM Customer
+            WHERE is_active = TRUE
+            """
+        )
 
-    cursor.close()
-    connection.close()
+        return cursor.fetchall()
 
-    return customers
+    except mysql.connector.Error as err:
+
+        raise HTTPException(
+            status_code=500,
+            detail=err.msg
+        )
+
+    finally:
+
+        if cursor:
+            cursor.close()
+
+        if connection:
+            connection.close()
 
 
+# ==========================================
 # UPDATE
+# ==========================================
+
 @router.put("/{customer_id}")
 def update_customer(
     customer_id: int,
     customer: CustomerCreate
 ):
 
-    connection = get_connection()
+    connection = None
+    cursor = None
 
-    cursor = connection.cursor()
+    try:
 
-    cursor.execute(
-        """
-        UPDATE Customer
-        SET customer_name = %s,
-            phone = %s,
-            address = %s
-        WHERE customer_id = %s
-        """,
-        (
-            customer.customer_name,
-            customer.phone,
-            customer.address,
-            customer_id
+        connection = get_connection()
+        cursor = connection.cursor()
+
+        cursor.execute(
+            """
+            UPDATE Customer
+            SET customer_name = %s,
+                phone = %s,
+                address = %s
+            WHERE customer_id = %s
+                AND is_active = TRUE
+            """,
+            (
+                customer.customer_name,
+                customer.phone,
+                customer.address,
+                customer_id
+            )
         )
-    )
 
-    connection.commit()
+        if cursor.rowcount == 0:
+            raise HTTPException(
+                status_code=404,
+                detail="Customer not found."
+            )
 
-    cursor.close()
-    connection.close()
+        connection.commit()
 
-    return {
-        "message": "Customer updated successfully!"
-    }
+        return {
+            "message": "Customer updated successfully!"
+        }
+
+    except mysql.connector.Error as err:
+
+        if connection:
+            connection.rollback()
+
+        raise HTTPException(
+            status_code=500,
+            detail=err.msg
+        )
+
+    finally:
+
+        if cursor:
+            cursor.close()
+
+        if connection:
+            connection.close()
 
 
+# ==========================================
 # SOFT DELETE
+# ==========================================
+
 @router.delete("/{customer_id}")
 def delete_customer(customer_id: int):
 
-    connection = get_connection()
+    connection = None
+    cursor = None
 
-    cursor = connection.cursor()
+    try:
 
-    cursor.execute(
-        """
-        UPDATE Customer
-        SET is_active = FALSE
-        WHERE customer_id = %s
-        """,
-        (customer_id,)
-    )
+        connection = get_connection()
+        cursor = connection.cursor()
 
-    connection.commit()
+        cursor.execute(
+            """
+            UPDATE Customer
+            SET is_active = FALSE
+            WHERE customer_id = %s
+            """,
+            (customer_id,)
+        )
 
-    cursor.close()
-    connection.close()
+        if cursor.rowcount == 0:
+            raise HTTPException(
+                status_code=404,
+                detail="Customer not found."
+            )
 
-    return {
-        "message": "Customer deactivated successfully!"
-    }
+        connection.commit()
+
+        return {
+            "message": "Customer deactivated successfully!"
+        }
+
+    except mysql.connector.Error as err:
+
+        if connection:
+            connection.rollback()
+
+        raise HTTPException(
+            status_code=500,
+            detail=err.msg
+        )
+
+    finally:
+
+        if cursor:
+            cursor.close()
+
+        if connection:
+            connection.close()

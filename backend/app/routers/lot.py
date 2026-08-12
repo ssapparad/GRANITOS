@@ -12,6 +12,19 @@ router = APIRouter(
 )
 
 
+LOT_SELECT_COLUMNS = """
+    l.lot_id,
+    g.granite_name,
+    l.lot_number,
+    l.purchase_date,
+    l.purchase_price_per_sqft,
+    l.total_slabs,
+    l.available_slabs,
+    l.total_sqft,
+    l.available_sqft
+"""
+
+
 # ==========================================
 # CREATE LOT
 # ==========================================
@@ -33,6 +46,7 @@ def add_lot(lot: LotCreate):
             (
                 granite_id,
                 lot_number,
+                purchase_date,
                 purchase_price_per_sqft,
                 total_slabs,
                 available_slabs,
@@ -40,11 +54,12 @@ def add_lot(lot: LotCreate):
                 available_sqft
             )
             VALUES
-            (%s,%s,%s,%s,%s,%s,%s)
+            (%s,%s,%s,%s,%s,%s,%s,%s)
             """,
             (
                 lot.granite_id,
                 lot.lot_number,
+                lot.purchase_date,
                 lot.purchase_price_per_sqft,
                 lot.total_slabs,
                 lot.total_slabs,
@@ -58,16 +73,8 @@ def add_lot(lot: LotCreate):
         connection.commit()
 
         cursor.execute(
-            """
-            SELECT
-                l.lot_id,
-                g.granite_name,
-                l.lot_number,
-                l.purchase_price_per_sqft,
-                l.total_slabs,
-                l.available_slabs,
-                l.total_sqft,
-                l.available_sqft
+            f"""
+            SELECT {LOT_SELECT_COLUMNS}
             FROM Lot l
             INNER JOIN Granite g
                 ON l.granite_id = g.granite_id
@@ -123,16 +130,8 @@ def get_lots():
         cursor = connection.cursor(dictionary=True)
 
         cursor.execute(
-            """
-            SELECT
-                l.lot_id,
-                g.granite_name,
-                l.lot_number,
-                l.purchase_price_per_sqft,
-                l.total_slabs,
-                l.available_slabs,
-                l.total_sqft,
-                l.available_sqft
+            f"""
+            SELECT {LOT_SELECT_COLUMNS}
             FROM Lot l
             INNER JOIN Granite g
                 ON l.granite_id = g.granite_id
@@ -142,6 +141,67 @@ def get_lots():
         )
 
         return cursor.fetchall()
+
+    except mysql.connector.Error as err:
+
+        raise HTTPException(
+            status_code=500,
+            detail=err.msg
+        )
+
+    finally:
+
+        if cursor:
+            cursor.close()
+
+        if connection:
+            connection.close()
+
+
+# ==========================================
+# GET SINGLE LOT
+# ==========================================
+
+@router.get("/{lot_id}")
+def get_lot(lot_id: int):
+
+    connection = None
+    cursor = None
+
+    try:
+
+        connection = get_connection()
+        cursor = connection.cursor(dictionary=True)
+
+        cursor.execute(
+            f"""
+            SELECT {LOT_SELECT_COLUMNS}
+            FROM Lot l
+            INNER JOIN Granite g
+                ON l.granite_id = g.granite_id
+            WHERE
+                l.lot_id = %s
+                AND l.is_active = TRUE
+            """,
+            (lot_id,)
+        )
+
+        lot = cursor.fetchone()
+
+        if lot is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Lot not found."
+            )
+
+        return lot
+
+    except mysql.connector.Error as err:
+
+        raise HTTPException(
+            status_code=500,
+            detail=err.msg
+        )
 
     finally:
 
@@ -196,16 +256,8 @@ def update_lot(
         connection.commit()
 
         cursor.execute(
-            """
-            SELECT
-                l.lot_id,
-                g.granite_name,
-                l.lot_number,
-                l.purchase_price_per_sqft,
-                l.total_slabs,
-                l.available_slabs,
-                l.total_sqft,
-                l.available_sqft
+            f"""
+            SELECT {LOT_SELECT_COLUMNS}
             FROM Lot l
             INNER JOIN Granite g
                 ON l.granite_id = g.granite_id

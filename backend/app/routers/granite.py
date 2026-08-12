@@ -10,9 +10,15 @@ router = APIRouter(
 )
 
 
+# ==========================================
 # CREATE
+# ==========================================
+
 @router.post("/")
 def add_granite(granite: GraniteCreate):
+
+    connection = None
+    cursor = None
 
     try:
 
@@ -26,14 +32,14 @@ def add_granite(granite: GraniteCreate):
 
         connection.commit()
 
-        cursor.close()
-        connection.close()
-
         return {
             "message": "Granite added successfully!"
         }
 
     except mysql.connector.Error as err:
+
+        if connection:
+            connection.rollback()
 
         if err.errno == 1062:
             raise HTTPException(
@@ -43,86 +49,167 @@ def add_granite(granite: GraniteCreate):
 
         raise HTTPException(
             status_code=500,
-            detail="Database error."
+            detail=err.msg
         )
 
+    finally:
 
+        if cursor:
+            cursor.close()
+
+        if connection:
+            connection.close()
+
+
+# ==========================================
 # READ
+# ==========================================
+
 @router.get("/")
 def get_granites():
 
-    connection = get_connection()
+    connection = None
+    cursor = None
 
-    cursor = connection.cursor(dictionary=True)
+    try:
 
-    cursor.execute(
-        """
-        SELECT *
-        FROM Granite
-        WHERE is_active = TRUE
-        """
-    )
+        connection = get_connection()
+        cursor = connection.cursor(dictionary=True)
 
-    granites = cursor.fetchall()
+        cursor.execute(
+            """
+            SELECT *
+            FROM Granite
+            WHERE is_active = TRUE
+            """
+        )
 
-    cursor.close()
-    connection.close()
+        return cursor.fetchall()
 
-    return granites
+    finally:
+
+        if cursor:
+            cursor.close()
+
+        if connection:
+            connection.close()
 
 
+# ==========================================
 # UPDATE
+# ==========================================
+
 @router.put("/{granite_id}")
 def update_granite(
     granite_id: int,
     granite: GraniteCreate
 ):
 
-    connection = get_connection()
+    connection = None
+    cursor = None
 
-    cursor = connection.cursor()
+    try:
 
-    cursor.execute(
-        """
-        UPDATE Granite
-        SET granite_name = %s
-        WHERE granite_id = %s
-        """,
-        (granite.granite_name, granite_id)
-    )
+        connection = get_connection()
+        cursor = connection.cursor()
 
-    connection.commit()
+        cursor.execute(
+            """
+            UPDATE Granite
+            SET granite_name = %s
+            WHERE granite_id = %s
+                AND is_active = TRUE
+            """,
+            (granite.granite_name, granite_id)
+        )
 
-    cursor.close()
-    connection.close()
+        if cursor.rowcount == 0:
+            raise HTTPException(
+                status_code=404,
+                detail="Granite not found."
+            )
 
-    return {
-        "message": "Granite updated successfully!"
-    }
+        connection.commit()
+
+        return {
+            "message": "Granite updated successfully!"
+        }
+
+    except mysql.connector.Error as err:
+
+        if connection:
+            connection.rollback()
+
+        if err.errno == 1062:
+            raise HTTPException(
+                status_code=409,
+                detail="Granite already exists."
+            )
+
+        raise HTTPException(
+            status_code=500,
+            detail=err.msg
+        )
+
+    finally:
+
+        if cursor:
+            cursor.close()
+
+        if connection:
+            connection.close()
 
 
+# ==========================================
 # SOFT DELETE
+# ==========================================
+
 @router.delete("/{granite_id}")
 def delete_granite(granite_id: int):
 
-    connection = get_connection()
+    connection = None
+    cursor = None
 
-    cursor = connection.cursor()
+    try:
 
-    cursor.execute(
-        """
-        UPDATE Granite
-        SET is_active = FALSE
-        WHERE granite_id = %s
-        """,
-        (granite_id,)
-    )
+        connection = get_connection()
+        cursor = connection.cursor()
 
-    connection.commit()
+        cursor.execute(
+            """
+            UPDATE Granite
+            SET is_active = FALSE
+            WHERE granite_id = %s
+            """,
+            (granite_id,)
+        )
 
-    cursor.close()
-    connection.close()
+        if cursor.rowcount == 0:
+            raise HTTPException(
+                status_code=404,
+                detail="Granite not found."
+            )
 
-    return {
-        "message": "Granite deactivated successfully!"
-    }
+        connection.commit()
+
+        return {
+            "message": "Granite deactivated successfully!"
+        }
+
+    except mysql.connector.Error as err:
+
+        if connection:
+            connection.rollback()
+
+        raise HTTPException(
+            status_code=500,
+            detail=err.msg
+        )
+
+    finally:
+
+        if cursor:
+            cursor.close()
+
+        if connection:
+            connection.close()
