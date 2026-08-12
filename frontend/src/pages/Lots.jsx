@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react'
+import { Boxes } from 'lucide-react'
 import client from '../api/client.js'
 import { useToast } from '../components/ToastProvider.jsx'
 import { useConfirm } from '../components/ConfirmProvider.jsx'
+import PageHeader from '../components/PageHeader.jsx'
+import Button from '../components/Button.jsx'
 
 const emptyForm = {
   granite_id: '',
@@ -12,11 +15,14 @@ const emptyForm = {
   total_sqft: ''
 }
 
+const inputClass = 'border border-line rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500'
+
 export default function Lots() {
   const [lots, setLots] = useState([])
   const [granites, setGranites] = useState([])
   const [form, setForm] = useState(emptyForm)
   const [error, setError] = useState('')
+  const [loaded, setLoaded] = useState(false)
   const showToast = useToast()
   const confirmAction = useConfirm()
 
@@ -26,6 +32,7 @@ export default function Lots() {
     try {
       const lotsRes = await client.get('/lots/')
       setLots(lotsRes.data)
+      setLoaded(true)
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to load lots.')
     }
@@ -77,14 +84,14 @@ export default function Lots() {
 
   return (
     <div>
-      <h2 className="text-lg font-semibold text-stone-900 mb-4">Lots</h2>
+      <PageHeader title="Lots" subtitle="Stock batches, purchase cost, and availability" />
 
       <form onSubmit={handleSubmit} className="grid grid-cols-2 sm:grid-cols-6 gap-2 mb-6">
         <select
           value={form.granite_id}
           onChange={(e) => updateField('granite_id', e.target.value)}
           required
-          className="border border-stone-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400 col-span-2 sm:col-span-1"
+          className={`${inputClass} col-span-2 sm:col-span-1`}
         >
           <option value="">Granite</option>
           {granites.map((g) => (
@@ -97,14 +104,14 @@ export default function Lots() {
           onChange={(e) => updateField('lot_number', e.target.value)}
           placeholder="Lot number"
           required
-          className="border border-stone-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400"
+          className={inputClass}
         />
         <input
           type="date"
           value={form.purchase_date}
           onChange={(e) => updateField('purchase_date', e.target.value)}
           required
-          className="border border-stone-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400"
+          className={inputClass}
         />
         <input
           type="number"
@@ -113,7 +120,7 @@ export default function Lots() {
           onChange={(e) => updateField('purchase_price_per_sqft', e.target.value)}
           placeholder="Purchase ₹/sqft"
           required
-          className="border border-stone-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400"
+          className={inputClass}
         />
         <input
           type="number"
@@ -121,7 +128,7 @@ export default function Lots() {
           onChange={(e) => updateField('total_slabs', e.target.value)}
           placeholder="Total slabs"
           required
-          className="border border-stone-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400"
+          className={inputClass}
         />
         <input
           type="number"
@@ -130,51 +137,53 @@ export default function Lots() {
           onChange={(e) => updateField('total_sqft', e.target.value)}
           placeholder="Total sqft"
           required
-          className="border border-stone-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400"
+          className={inputClass}
         />
-        <button
-          type="submit"
-          className="bg-stone-800 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-stone-700 col-span-2 sm:col-span-1"
-        >
+        <Button type="submit" className="col-span-2 sm:col-span-1">
           Add Lot
-        </button>
+        </Button>
       </form>
 
       {error && <p className="text-red-600 text-sm mb-4">{error}</p>}
 
-      <div className="bg-white border border-stone-200 rounded-md overflow-hidden overflow-x-auto">
+      <div className="bg-white border border-line rounded-2xl overflow-hidden overflow-x-auto shadow-card">
         <table className="w-full text-sm">
-          <thead className="bg-stone-100 text-stone-600 text-left">
+          <thead className="bg-canvas text-ink-muted text-left">
             <tr>
-              <th className="px-4 py-2">Granite</th>
-              <th className="px-4 py-2">Lot #</th>
-              <th className="px-4 py-2">Purchase Date</th>
-              <th className="px-4 py-2">Purchase ₹/sqft</th>
-              <th className="px-4 py-2">Slabs (avail/total)</th>
-              <th className="px-4 py-2">Sqft (avail/total)</th>
-              <th className="px-4 py-2 w-20"></th>
+              <th className="px-4 py-2.5 font-medium">Granite</th>
+              <th className="px-4 py-2.5 font-medium">Lot #</th>
+              <th className="px-4 py-2.5 font-medium">Purchase Date</th>
+              <th className="px-4 py-2.5 font-medium">Purchase ₹/sqft</th>
+              <th className="px-4 py-2.5 font-medium">Slabs (avail/total)</th>
+              <th className="px-4 py-2.5 font-medium">Sqft (avail/total)</th>
+              <th className="px-4 py-2.5 font-medium w-20"></th>
             </tr>
           </thead>
           <tbody>
             {lots.map((l) => (
-              <tr key={l.lot_id} className="border-t border-stone-100">
-                <td className="px-4 py-2 text-stone-800">{l.granite_name}</td>
-                <td className="px-4 py-2 text-stone-600">{l.lot_number}</td>
-                <td className="px-4 py-2 text-stone-600">{l.purchase_date}</td>
-                <td className="px-4 py-2 text-stone-600">{l.purchase_price_per_sqft}</td>
-                <td className="px-4 py-2 text-stone-600">{l.available_slabs} / {l.total_slabs}</td>
-                <td className="px-4 py-2 text-stone-600">{l.available_sqft} / {l.total_sqft}</td>
-                <td className="px-4 py-2 text-right">
-                  <button onClick={() => handleDelete(l.lot_id)} className="text-red-600 hover:underline">
+              <tr key={l.lot_id} className="border-t border-line-soft hover:bg-canvas/60 transition-colors">
+                <td className="px-4 py-2.5 text-ink">{l.granite_name}</td>
+                <td className="px-4 py-2.5 text-ink-muted">{l.lot_number}</td>
+                <td className="px-4 py-2.5 text-ink-muted">{l.purchase_date}</td>
+                <td className="px-4 py-2.5 text-ink-muted">{l.purchase_price_per_sqft}</td>
+                <td className="px-4 py-2.5 text-ink-muted">{l.available_slabs} / {l.total_slabs}</td>
+                <td className="px-4 py-2.5 text-ink-muted">{l.available_sqft} / {l.total_sqft}</td>
+                <td className="px-4 py-2.5 text-right">
+                  <button onClick={() => handleDelete(l.lot_id)} className="text-red-600 hover:text-red-700 font-medium">
                     Delete
                   </button>
                 </td>
               </tr>
             ))}
-            {lots.length === 0 && (
+            {loaded && lots.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-6 text-center text-stone-400">
-                  No lots yet.
+                <td colSpan={7} className="px-4 py-14">
+                  <div className="flex flex-col items-center gap-3 text-center">
+                    <div className="w-10 h-10 rounded-full bg-canvas flex items-center justify-center">
+                      <Boxes size={18} className="text-ink-faint" strokeWidth={2} />
+                    </div>
+                    <p className="text-sm text-ink-muted">No lots yet.</p>
+                  </div>
                 </td>
               </tr>
             )}

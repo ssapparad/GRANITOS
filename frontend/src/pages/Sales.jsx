@@ -24,7 +24,7 @@ export default function Sales() {
         action={<Button to="/sales/new" icon={PlusCircle}>New Sale</Button>}
       />
 
-      <div className="bg-white border border-line rounded-xl overflow-hidden shadow-card">
+      <div className="bg-white border border-line rounded-xl overflow-hidden overflow-x-auto shadow-card">
         <table className="w-full text-sm">
           <thead className="bg-canvas text-ink-muted text-left">
             <tr>

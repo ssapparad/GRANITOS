@@ -400,7 +400,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <div>
           <h3 className="text-sm font-semibold text-ink mb-3">Low Stock Lots</h3>
-          <div className="bg-white border border-line rounded-2xl overflow-hidden shadow-card">
+          <div className="bg-white border border-line rounded-2xl overflow-hidden overflow-x-auto shadow-card">
             <table className="w-full text-sm">
               <thead className="bg-canvas text-ink-muted text-left">
                 <tr>
@@ -437,7 +437,7 @@ export default function Dashboard() {
 
         <div>
           <h3 className="text-sm font-semibold text-ink mb-3">Recent Sales</h3>
-          <div className="bg-white border border-line rounded-2xl overflow-hidden shadow-card">
+          <div className="bg-white border border-line rounded-2xl overflow-hidden overflow-x-auto shadow-card">
             <table className="w-full text-sm">
               <thead className="bg-canvas text-ink-muted text-left">
                 <tr>

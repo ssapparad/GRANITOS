@@ -2,9 +2,13 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import client from '../api/client.js'
 import { useToast } from '../components/ToastProvider.jsx'
+import PageHeader from '../components/PageHeader.jsx'
+import Button from '../components/Button.jsx'
 
 const emptyItem = { lot_id: '', slabs_sold: '', sqft_sold: '', negotiated_rate_per_sqft: '' }
 const emptyCustomerForm = { customer_name: '', phone: '', address: '' }
+
+const inputClass = 'border border-line rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500'
 
 export default function NewSale() {
   const navigate = useNavigate()
@@ -100,9 +104,9 @@ export default function NewSale() {
 
   return (
     <div>
-      <h2 className="text-lg font-semibold text-stone-900 mb-4">New Sale</h2>
+      <PageHeader title="New Sale" subtitle="Record an invoice against available stock" />
 
-      <form onSubmit={handleSubmit} className="bg-white border border-stone-200 rounded-md p-6 space-y-4">
+      <form onSubmit={handleSubmit} className="bg-white border border-line rounded-2xl shadow-card p-4 sm:p-6 space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <input
             type="text"
@@ -110,7 +114,7 @@ export default function NewSale() {
             onChange={(e) => setInvoiceNo(e.target.value)}
             placeholder="Invoice number"
             required
-            className="border border-stone-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400"
+            className={inputClass}
           />
 
           <div>
@@ -118,7 +122,7 @@ export default function NewSale() {
               value={customerId}
               onChange={(e) => setCustomerId(e.target.value)}
               required
-              className="w-full border border-stone-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400"
+              className={`w-full ${inputClass}`}
             >
               <option value="">Customer</option>
               {customers.map((c) => (
@@ -128,7 +132,7 @@ export default function NewSale() {
             <button
               type="button"
               onClick={() => setShowNewCustomer((prev) => !prev)}
-              className="text-xs text-stone-500 hover:underline mt-1"
+              className="text-xs text-emerald-700 hover:underline mt-1 font-medium"
             >
               {showNewCustomer ? 'Cancel' : '+ New customer'}
             </button>
@@ -139,13 +143,13 @@ export default function NewSale() {
             value={saleDate}
             onChange={(e) => setSaleDate(e.target.value)}
             required
-            className="border border-stone-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400"
+            className={inputClass}
           />
         </div>
 
         {showNewCustomer && (
-          <div className="bg-stone-50 border border-stone-200 rounded-md p-4 space-y-2">
-            <h4 className="text-sm font-medium text-stone-700">New Customer</h4>
+          <div className="bg-canvas border border-line rounded-xl p-4 space-y-2">
+            <h4 className="text-sm font-medium text-ink">New Customer</h4>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               <input
                 type="text"
@@ -153,31 +157,27 @@ export default function NewSale() {
                 onChange={(e) => updateNewCustomerField('customer_name', e.target.value)}
                 placeholder="Customer name"
                 required
-                className="border border-stone-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400"
+                className={`bg-white ${inputClass}`}
               />
               <input
                 type="text"
                 value={newCustomerForm.phone}
                 onChange={(e) => updateNewCustomerField('phone', e.target.value)}
                 placeholder="Phone"
-                className="border border-stone-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400"
+                className={`bg-white ${inputClass}`}
               />
               <input
                 type="text"
                 value={newCustomerForm.address}
                 onChange={(e) => updateNewCustomerField('address', e.target.value)}
                 placeholder="Address"
-                className="border border-stone-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400"
+                className={`bg-white ${inputClass}`}
               />
             </div>
             {newCustomerError && <p className="text-red-600 text-sm">{newCustomerError}</p>}
-            <button
-              type="button"
-              onClick={handleAddCustomer}
-              className="bg-stone-800 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-stone-700"
-            >
+            <Button type="button" onClick={handleAddCustomer} size="sm">
               Save Customer
-            </button>
+            </Button>
           </div>
         )}
 
@@ -187,7 +187,7 @@ export default function NewSale() {
             value={remarks}
             onChange={(e) => setRemarks(e.target.value)}
             placeholder="Remarks (optional)"
-            className="border border-stone-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400"
+            className={inputClass}
           />
           <input
             type="number"
@@ -195,7 +195,7 @@ export default function NewSale() {
             value={commission}
             onChange={(e) => setCommission(e.target.value)}
             placeholder="Commission (optional)"
-            className="border border-stone-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400"
+            className={inputClass}
           />
           <input
             type="number"
@@ -203,12 +203,12 @@ export default function NewSale() {
             value={loadingCharge}
             onChange={(e) => setLoadingCharge(e.target.value)}
             placeholder="Loading charge (optional)"
-            className="border border-stone-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400"
+            className={inputClass}
           />
         </div>
 
         <div className="space-y-2">
-          <h3 className="text-sm font-medium text-stone-700">Items</h3>
+          <h3 className="text-sm font-medium text-ink">Items</h3>
 
           {items.map((item, idx) => (
             <div key={idx} className="grid grid-cols-2 sm:grid-cols-5 gap-2 items-center">
@@ -216,7 +216,7 @@ export default function NewSale() {
                 value={item.lot_id}
                 onChange={(e) => updateItem(idx, 'lot_id', e.target.value)}
                 required
-                className="border border-stone-300 rounded-md px-3 py-2 text-sm col-span-2 sm:col-span-1 focus:outline-none focus:ring-2 focus:ring-stone-400"
+                className={`col-span-2 sm:col-span-1 ${inputClass}`}
               >
                 <option value="">Lot</option>
                 {lots.map((l) => (
@@ -231,7 +231,7 @@ export default function NewSale() {
                 onChange={(e) => updateItem(idx, 'slabs_sold', e.target.value)}
                 placeholder="Slabs sold"
                 required
-                className="border border-stone-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400"
+                className={inputClass}
               />
               <input
                 type="number"
@@ -240,7 +240,7 @@ export default function NewSale() {
                 onChange={(e) => updateItem(idx, 'sqft_sold', e.target.value)}
                 placeholder="Sqft sold"
                 required
-                className="border border-stone-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400"
+                className={inputClass}
               />
               <input
                 type="number"
@@ -249,13 +249,13 @@ export default function NewSale() {
                 onChange={(e) => updateItem(idx, 'negotiated_rate_per_sqft', e.target.value)}
                 placeholder="Rate ₹/sqft"
                 required
-                className="border border-stone-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400"
+                className={inputClass}
               />
               {items.length > 1 && (
                 <button
                   type="button"
                   onClick={() => removeItemRow(idx)}
-                  className="text-red-600 text-sm hover:underline"
+                  className="text-red-600 text-sm hover:underline text-left sm:text-center"
                 >
                   Remove
                 </button>
@@ -266,7 +266,7 @@ export default function NewSale() {
           <button
             type="button"
             onClick={addItemRow}
-            className="text-sm text-stone-600 hover:underline"
+            className="text-sm text-emerald-700 hover:underline font-medium"
           >
             + Add another item
           </button>
@@ -274,12 +274,9 @@ export default function NewSale() {
 
         {error && <p className="text-red-600 text-sm">{error}</p>}
 
-        <button
-          type="submit"
-          className="bg-stone-800 text-white px-5 py-2.5 rounded-md text-sm font-medium hover:bg-stone-700"
-        >
+        <Button type="submit" size="lg">
           Create Sale
-        </button>
+        </Button>
       </form>
     </div>
   )

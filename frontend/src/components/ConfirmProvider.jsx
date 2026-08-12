@@ -26,14 +26,14 @@ export function ConfirmProvider({ children }) {
     <ConfirmContext.Provider value={confirmAction}>
       {children}
       {dialog && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-md shadow-xl p-6 w-full max-w-sm">
-            <h3 className="text-sm font-semibold text-stone-900 mb-2">{dialog.title}</h3>
-            <p className="text-sm text-stone-600 mb-6">{dialog.message}</p>
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm">
+            <h3 className="text-sm font-semibold text-ink mb-2">{dialog.title}</h3>
+            <p className="text-sm text-ink-muted mb-6">{dialog.message}</p>
             <div className="flex justify-end gap-2">
               <button
                 onClick={dialog.onCancel}
-                className="px-4 py-2 rounded-md text-sm text-stone-600 hover:bg-stone-100"
+                className="px-4 py-2 rounded-lg text-sm text-ink-muted hover:bg-canvas"
               >
                 Cancel
               </button>

@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react'
+import { Users } from 'lucide-react'
 import client from '../api/client.js'
 import { useToast } from '../components/ToastProvider.jsx'
 import { useConfirm } from '../components/ConfirmProvider.jsx'
+import PageHeader from '../components/PageHeader.jsx'
+import Button from '../components/Button.jsx'
 
 const emptyForm = { customer_name: '', phone: '', address: '' }
 
@@ -10,12 +13,14 @@ export default function Customers() {
   const [form, setForm] = useState(emptyForm)
   const [editingId, setEditingId] = useState(null)
   const [error, setError] = useState('')
+  const [loaded, setLoaded] = useState(false)
   const showToast = useToast()
   const confirmAction = useConfirm()
 
   async function loadCustomers() {
     const res = await client.get('/customers/')
     setCustomers(res.data)
+    setLoaded(true)
   }
 
   useEffect(() => {
@@ -65,7 +70,7 @@ export default function Customers() {
 
   return (
     <div>
-      <h2 className="text-lg font-semibold text-stone-900 mb-4">Customers</h2>
+      <PageHeader title="Customers" subtitle="Everyone who's bought from the showroom" />
 
       <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-4 gap-2 mb-6">
         <input
@@ -74,73 +79,75 @@ export default function Customers() {
           onChange={(e) => updateField('customer_name', e.target.value)}
           placeholder="Customer name"
           required
-          className="border border-stone-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400"
+          className="border border-line rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500"
         />
         <input
           type="text"
           value={form.phone}
           onChange={(e) => updateField('phone', e.target.value)}
           placeholder="Phone"
-          className="border border-stone-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400"
+          className="border border-line rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500"
         />
         <input
           type="text"
           value={form.address}
           onChange={(e) => updateField('address', e.target.value)}
           placeholder="Address"
-          className="border border-stone-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400"
+          className="border border-line rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500"
         />
         <div className="flex gap-2">
-          <button
-            type="submit"
-            className="flex-1 bg-stone-800 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-stone-700"
-          >
+          <Button type="submit" className="flex-1">
             {editingId ? 'Update' : 'Add'}
-          </button>
+          </Button>
           {editingId && (
-            <button
+            <Button
               type="button"
+              variant="ghost"
               onClick={() => { setEditingId(null); setForm(emptyForm) }}
-              className="px-3 py-2 rounded-md text-sm text-stone-500 hover:bg-stone-100"
             >
               Cancel
-            </button>
+            </Button>
           )}
         </div>
       </form>
 
       {error && <p className="text-red-600 text-sm mb-4">{error}</p>}
 
-      <div className="bg-white border border-stone-200 rounded-md overflow-hidden">
+      <div className="bg-white border border-line rounded-2xl overflow-hidden overflow-x-auto shadow-card">
         <table className="w-full text-sm">
-          <thead className="bg-stone-100 text-stone-600 text-left">
+          <thead className="bg-canvas text-ink-muted text-left">
             <tr>
-              <th className="px-4 py-2">Name</th>
-              <th className="px-4 py-2">Phone</th>
-              <th className="px-4 py-2">Address</th>
-              <th className="px-4 py-2 w-32"></th>
+              <th className="px-4 py-2.5 font-medium">Name</th>
+              <th className="px-4 py-2.5 font-medium">Phone</th>
+              <th className="px-4 py-2.5 font-medium">Address</th>
+              <th className="px-4 py-2.5 font-medium w-32"></th>
             </tr>
           </thead>
           <tbody>
             {customers.map((c) => (
-              <tr key={c.customer_id} className="border-t border-stone-100">
-                <td className="px-4 py-2 text-stone-800">{c.customer_name}</td>
-                <td className="px-4 py-2 text-stone-600">{c.phone}</td>
-                <td className="px-4 py-2 text-stone-600">{c.address}</td>
-                <td className="px-4 py-2 text-right space-x-2">
-                  <button onClick={() => startEdit(c)} className="text-stone-600 hover:underline">
+              <tr key={c.customer_id} className="border-t border-line-soft hover:bg-canvas/60 transition-colors">
+                <td className="px-4 py-2.5 text-ink">{c.customer_name}</td>
+                <td className="px-4 py-2.5 text-ink-muted">{c.phone}</td>
+                <td className="px-4 py-2.5 text-ink-muted">{c.address}</td>
+                <td className="px-4 py-2.5 text-right space-x-3 whitespace-nowrap">
+                  <button onClick={() => startEdit(c)} className="text-ink-muted hover:text-ink font-medium">
                     Edit
                   </button>
-                  <button onClick={() => handleDelete(c.customer_id)} className="text-red-600 hover:underline">
+                  <button onClick={() => handleDelete(c.customer_id)} className="text-red-600 hover:text-red-700 font-medium">
                     Delete
                   </button>
                 </td>
               </tr>
             ))}
-            {customers.length === 0 && (
+            {loaded && customers.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-4 py-6 text-center text-stone-400">
-                  No customers yet.
+                <td colSpan={4} className="px-4 py-14">
+                  <div className="flex flex-col items-center gap-3 text-center">
+                    <div className="w-10 h-10 rounded-full bg-canvas flex items-center justify-center">
+                      <Users size={18} className="text-ink-faint" strokeWidth={2} />
+                    </div>
+                    <p className="text-sm text-ink-muted">No customers yet.</p>
+                  </div>
                 </td>
               </tr>
             )}
