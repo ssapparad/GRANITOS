@@ -1,4 +1,4 @@
-import mysql.connector
+import psycopg2
 
 from fastapi import APIRouter, HTTPException
 
@@ -123,6 +123,7 @@ def record_payment(payment: PaymentCreate):
             )
             VALUES
             (%s, %s, %s, %s, %s)
+            RETURNING payment_id
             """,
             (
                 payment.sale_id,
@@ -133,7 +134,7 @@ def record_payment(payment: PaymentCreate):
             )
         )
 
-        payment_id = cursor.lastrowid
+        payment_id = cursor.fetchone()["payment_id"]
 
         connection.commit()
 
@@ -157,14 +158,14 @@ def record_payment(payment: PaymentCreate):
 
         return cursor.fetchone()
 
-    except mysql.connector.Error as err:
+    except psycopg2.Error as err:
 
         if connection:
             connection.rollback()
 
         raise HTTPException(
             status_code=500,
-            detail=err.msg
+            detail=str(err).strip()
         )
 
     finally:
@@ -232,11 +233,11 @@ def get_sale_balance(sale_id: int):
             "payments": payments
         }
 
-    except mysql.connector.Error as err:
+    except psycopg2.Error as err:
 
         raise HTTPException(
             status_code=500,
-            detail=err.msg
+            detail=str(err).strip()
         )
 
     finally:
@@ -338,11 +339,11 @@ def get_customer_outstanding(customer_id: int):
             "total_outstanding": total_billed - total_refunded - total_paid
         }
 
-    except mysql.connector.Error as err:
+    except psycopg2.Error as err:
 
         raise HTTPException(
             status_code=500,
-            detail=err.msg
+            detail=str(err).strip()
         )
 
     finally:
@@ -393,11 +394,11 @@ def get_all_payments():
 
         return cursor.fetchall()
 
-    except mysql.connector.Error as err:
+    except psycopg2.Error as err:
 
         raise HTTPException(
             status_code=500,
-            detail=err.msg
+            detail=str(err).strip()
         )
 
     finally:

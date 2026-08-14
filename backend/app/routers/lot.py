@@ -1,4 +1,5 @@
-import mysql.connector
+import psycopg2
+from psycopg2 import errorcodes
 
 from fastapi import APIRouter, HTTPException
 
@@ -55,6 +56,7 @@ def add_lot(lot: LotCreate):
             )
             VALUES
             (%s,%s,%s,%s,%s,%s,%s,%s)
+            RETURNING lot_id
             """,
             (
                 lot.granite_id,
@@ -68,7 +70,7 @@ def add_lot(lot: LotCreate):
             )
         )
 
-        lot_id = cursor.lastrowid
+        lot_id = cursor.fetchone()["lot_id"]
 
         connection.commit()
 
@@ -89,12 +91,12 @@ def add_lot(lot: LotCreate):
 
         return created_lot
 
-    except mysql.connector.Error as err:
+    except psycopg2.Error as err:
 
         if connection:
             connection.rollback()
 
-        if err.errno == 1062:
+        if err.pgcode == errorcodes.UNIQUE_VIOLATION:
             raise HTTPException(
                 status_code=409,
                 detail="Lot already exists."
@@ -102,7 +104,7 @@ def add_lot(lot: LotCreate):
 
         raise HTTPException(
             status_code=500,
-            detail=err.msg
+            detail=str(err).strip()
         )
 
     finally:
@@ -142,11 +144,11 @@ def get_lots():
 
         return cursor.fetchall()
 
-    except mysql.connector.Error as err:
+    except psycopg2.Error as err:
 
         raise HTTPException(
             status_code=500,
-            detail=err.msg
+            detail=str(err).strip()
         )
 
     finally:
@@ -196,11 +198,11 @@ def get_lot(lot_id: int):
 
         return lot
 
-    except mysql.connector.Error as err:
+    except psycopg2.Error as err:
 
         raise HTTPException(
             status_code=500,
-            detail=err.msg
+            detail=str(err).strip()
         )
 
     finally:
@@ -272,12 +274,12 @@ def update_lot(
 
         return updated_lot
 
-    except mysql.connector.Error as err:
+    except psycopg2.Error as err:
 
         if connection:
             connection.rollback()
 
-        if err.errno == 1062:
+        if err.pgcode == errorcodes.UNIQUE_VIOLATION:
             raise HTTPException(
                 status_code=409,
                 detail="Lot already exists."
@@ -285,7 +287,7 @@ def update_lot(
 
         raise HTTPException(
             status_code=500,
-            detail=err.msg
+            detail=str(err).strip()
         )
 
     finally:
@@ -333,14 +335,14 @@ def delete_lot(lot_id: int):
             "message": "Lot deleted successfully."
         }
 
-    except mysql.connector.Error as err:
+    except psycopg2.Error as err:
 
         if connection:
             connection.rollback()
 
         raise HTTPException(
             status_code=500,
-            detail=err.msg
+            detail=str(err).strip()
         )
 
     finally:

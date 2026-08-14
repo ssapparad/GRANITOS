@@ -1,20 +1,21 @@
 -- ==========================================
--- GRANITOS Database Schema
+-- GRANITOS Database Schema (PostgreSQL)
 -- Author : Shreyas Sapparad
 -- Consolidated schema through the Returns +
 -- Commission/Loading/Refund checkpoint.
+--
+-- Run this against your target Postgres database
+-- (create the database itself first — Postgres has
+-- no `CREATE DATABASE IF NOT EXISTS` / `USE`; a hosted
+-- provider like Neon creates one for you automatically).
 -- ==========================================
-
-CREATE DATABASE IF NOT EXISTS granitos;
-
-USE granitos;
 
 -- ==========================================
 -- Customer Table
 -- ==========================================
 
 CREATE TABLE IF NOT EXISTS Customer (
-    customer_id INT AUTO_INCREMENT PRIMARY KEY,
+    customer_id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     customer_name VARCHAR(100) NOT NULL,
     phone VARCHAR(15),
     address VARCHAR(255),
@@ -26,7 +27,7 @@ CREATE TABLE IF NOT EXISTS Customer (
 -- ==========================================
 
 CREATE TABLE IF NOT EXISTS Granite (
-    granite_id INT AUTO_INCREMENT PRIMARY KEY,
+    granite_id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     granite_name VARCHAR(100) NOT NULL UNIQUE,
     is_active BOOLEAN NOT NULL DEFAULT TRUE
 );
@@ -36,7 +37,7 @@ CREATE TABLE IF NOT EXISTS Granite (
 -- ==========================================
 
 CREATE TABLE IF NOT EXISTS Lot (
-    lot_id INT AUTO_INCREMENT PRIMARY KEY,
+    lot_id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     granite_id INT NOT NULL,
     lot_number VARCHAR(50) NOT NULL,
     purchase_date DATE NOT NULL,
@@ -55,7 +56,7 @@ CREATE TABLE IF NOT EXISTS Lot (
 -- ==========================================
 
 CREATE TABLE IF NOT EXISTS Sale (
-    sale_id INT AUTO_INCREMENT PRIMARY KEY,
+    sale_id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     invoice_no VARCHAR(50) NOT NULL UNIQUE,
     customer_id INT NOT NULL,
     sale_date DATE NOT NULL,
@@ -72,7 +73,7 @@ CREATE TABLE IF NOT EXISTS Sale (
 -- ==========================================
 
 CREATE TABLE IF NOT EXISTS Sale_Item (
-    sale_item_id INT AUTO_INCREMENT PRIMARY KEY,
+    sale_item_id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     sale_id INT NOT NULL,
     lot_id INT NOT NULL,
     slabs_sold INT NOT NULL,
@@ -84,14 +85,18 @@ CREATE TABLE IF NOT EXISTS Sale_Item (
 
 -- ==========================================
 -- Payment Table
+-- (payment_method uses a CHECK constraint rather than
+-- a native Postgres ENUM type, so this file can stay
+-- idempotent with plain `CREATE TABLE IF NOT EXISTS` —
+-- Postgres has no `CREATE TYPE IF NOT EXISTS`.)
 -- ==========================================
 
 CREATE TABLE IF NOT EXISTS Payment (
-    payment_id INT AUTO_INCREMENT PRIMARY KEY,
+    payment_id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     sale_id INT NOT NULL,
     payment_date DATE NOT NULL,
     amount DECIMAL(10,2) NOT NULL,
-    payment_method ENUM('CASH', 'UPI', 'BANK_TRANSFER') NOT NULL,
+    payment_method VARCHAR(20) NOT NULL CHECK (payment_method IN ('CASH', 'UPI', 'BANK_TRANSFER')),
     remarks VARCHAR(255),
     FOREIGN KEY (sale_id) REFERENCES Sale(sale_id)
 );
@@ -111,14 +116,14 @@ CREATE TABLE IF NOT EXISTS Settings (
     currency_symbol VARCHAR(5) NOT NULL DEFAULT '₹'
 );
 
-INSERT IGNORE INTO Settings (setting_id) VALUES (1);
+INSERT INTO Settings (setting_id) VALUES (1) ON CONFLICT (setting_id) DO NOTHING;
 
 -- ==========================================
 -- Sale Return Table
 -- ==========================================
 
 CREATE TABLE IF NOT EXISTS Sale_Return (
-    return_id INT AUTO_INCREMENT PRIMARY KEY,
+    return_id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     sale_item_id INT NOT NULL,
     return_date DATE NOT NULL,
     sqft_returned DECIMAL(10,2) NOT NULL,
@@ -136,11 +141,11 @@ CREATE TABLE IF NOT EXISTS Sale_Return (
 -- ==========================================
 
 CREATE TABLE IF NOT EXISTS Refund (
-    refund_id INT AUTO_INCREMENT PRIMARY KEY,
+    refund_id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     return_id INT NOT NULL,
     refund_date DATE NOT NULL,
     amount DECIMAL(10,2) NOT NULL,
-    refund_method ENUM('CASH', 'UPI', 'BANK_TRANSFER') NOT NULL,
+    refund_method VARCHAR(20) NOT NULL CHECK (refund_method IN ('CASH', 'UPI', 'BANK_TRANSFER')),
     remarks VARCHAR(255),
     FOREIGN KEY (return_id) REFERENCES Sale_Return(return_id)
 );

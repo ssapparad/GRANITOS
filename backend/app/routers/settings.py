@@ -1,4 +1,4 @@
-import mysql.connector
+import psycopg2
 
 from fastapi import APIRouter, HTTPException
 
@@ -49,7 +49,7 @@ def get_settings():
         if settings is None:
 
             cursor.execute(
-                "INSERT IGNORE INTO Settings (setting_id) VALUES (1)"
+                "INSERT INTO Settings (setting_id) VALUES (1) ON CONFLICT (setting_id) DO NOTHING"
             )
 
             connection.commit()
@@ -98,7 +98,7 @@ def update_settings(settings: SettingsUpdate):
         cursor = connection.cursor(dictionary=True)
 
         cursor.execute(
-            "INSERT IGNORE INTO Settings (setting_id) VALUES (1)"
+            "INSERT INTO Settings (setting_id) VALUES (1) ON CONFLICT (setting_id) DO NOTHING"
         )
 
         cursor.execute(
@@ -148,14 +148,14 @@ def update_settings(settings: SettingsUpdate):
 
         return updated
 
-    except mysql.connector.Error as err:
+    except psycopg2.Error as err:
 
         if connection:
             connection.rollback()
 
         raise HTTPException(
             status_code=500,
-            detail=err.msg
+            detail=str(err).strip()
         )
 
     finally:

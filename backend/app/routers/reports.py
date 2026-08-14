@@ -1,4 +1,4 @@
-import mysql.connector
+import psycopg2
 from datetime import date
 from decimal import Decimal
 from typing import Optional
@@ -74,9 +74,9 @@ def get_sales_report(
             "sales": sales
         }
 
-    except mysql.connector.Error as err:
+    except psycopg2.Error as err:
 
-        raise HTTPException(status_code=500, detail=err.msg)
+        raise HTTPException(status_code=500, detail=str(err).strip())
 
     finally:
 
@@ -136,9 +136,9 @@ def get_inventory_report(
             "lots": lots
         }
 
-    except mysql.connector.Error as err:
+    except psycopg2.Error as err:
 
-        raise HTTPException(status_code=500, detail=err.msg)
+        raise HTTPException(status_code=500, detail=str(err).strip())
 
     finally:
 
@@ -282,9 +282,9 @@ def get_customer_report(
             "customers": report_rows
         }
 
-    except mysql.connector.Error as err:
+    except psycopg2.Error as err:
 
-        raise HTTPException(status_code=500, detail=err.msg)
+        raise HTTPException(status_code=500, detail=str(err).strip())
 
     finally:
 
@@ -322,7 +322,7 @@ def get_outstanding_report():
                         - COALESCE(refund_totals.total_refunded, 0)
                         - COALESCE(payment_totals.amount_paid, 0)
                 ) AS balance_due,
-                DATEDIFF(CURDATE(), s.sale_date) AS days_outstanding
+                (CURRENT_DATE - s.sale_date) AS days_outstanding
             FROM Sale s
             INNER JOIN Customer c ON s.customer_id = c.customer_id
             INNER JOIN (
@@ -357,9 +357,9 @@ def get_outstanding_report():
             "sales": sales
         }
 
-    except mysql.connector.Error as err:
+    except psycopg2.Error as err:
 
-        raise HTTPException(status_code=500, detail=err.msg)
+        raise HTTPException(status_code=500, detail=str(err).strip())
 
     finally:
 
@@ -554,9 +554,9 @@ def get_day_closing_report(
             }
         }
 
-    except mysql.connector.Error as err:
+    except psycopg2.Error as err:
 
-        raise HTTPException(status_code=500, detail=err.msg)
+        raise HTTPException(status_code=500, detail=str(err).strip())
 
     finally:
 

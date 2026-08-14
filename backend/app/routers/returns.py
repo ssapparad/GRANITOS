@@ -1,4 +1,4 @@
-import mysql.connector
+import psycopg2
 from datetime import date
 from decimal import Decimal
 
@@ -115,6 +115,7 @@ def add_return(ret: ReturnCreate):
             INSERT INTO Sale_Return
             (sale_item_id, return_date, sqft_returned, slabs_returned, deduction_percent, refund_amount, remarks)
             VALUES (%s, %s, %s, %s, %s, %s, %s)
+            RETURNING return_id
             """,
             (
                 ret.sale_item_id, ret.return_date, ret.sqft_returned, ret.slabs_returned,
@@ -122,7 +123,7 @@ def add_return(ret: ReturnCreate):
             )
         )
 
-        return_id = cursor.lastrowid
+        return_id = cursor.fetchone()["return_id"]
 
         cursor.execute(
             """
@@ -164,12 +165,12 @@ def add_return(ret: ReturnCreate):
             "refunded": refunded
         }
 
-    except mysql.connector.Error as err:
+    except psycopg2.Error as err:
 
         if connection:
             connection.rollback()
 
-        raise HTTPException(status_code=500, detail=err.msg)
+        raise HTTPException(status_code=500, detail=str(err).strip())
 
     finally:
 
@@ -282,9 +283,9 @@ def get_sale_return_summary(sale_id: int):
             "returns": returns
         }
 
-    except mysql.connector.Error as err:
+    except psycopg2.Error as err:
 
-        raise HTTPException(status_code=500, detail=err.msg)
+        raise HTTPException(status_code=500, detail=str(err).strip())
 
     finally:
 
