@@ -1,4 +1,4 @@
-import mysql.connector
+import psycopg2
 
 from fastapi import APIRouter, HTTPException
 from app.database import get_connection
@@ -30,6 +30,7 @@ def add_customer(customer: CustomerCreate):
             INSERT INTO Customer
             (customer_name, phone, address)
             VALUES (%s, %s, %s)
+            RETURNING customer_id
             """,
             (
                 customer.customer_name,
@@ -38,7 +39,7 @@ def add_customer(customer: CustomerCreate):
             )
         )
 
-        customer_id = cursor.lastrowid
+        customer_id = cursor.fetchone()["customer_id"]
 
         connection.commit()
 
@@ -57,14 +58,14 @@ def add_customer(customer: CustomerCreate):
 
         return created_customer
 
-    except mysql.connector.Error as err:
+    except psycopg2.Error as err:
 
         if connection:
             connection.rollback()
 
         raise HTTPException(
             status_code=500,
-            detail=err.msg
+            detail=str(err).strip()
         )
 
     finally:
@@ -101,11 +102,11 @@ def get_customers():
 
         return cursor.fetchall()
 
-    except mysql.connector.Error as err:
+    except psycopg2.Error as err:
 
         raise HTTPException(
             status_code=500,
-            detail=err.msg
+            detail=str(err).strip()
         )
 
     finally:
@@ -164,14 +165,14 @@ def update_customer(
             "message": "Customer updated successfully!"
         }
 
-    except mysql.connector.Error as err:
+    except psycopg2.Error as err:
 
         if connection:
             connection.rollback()
 
         raise HTTPException(
             status_code=500,
-            detail=err.msg
+            detail=str(err).strip()
         )
 
     finally:
@@ -219,14 +220,14 @@ def delete_customer(customer_id: int):
             "message": "Customer deactivated successfully!"
         }
 
-    except mysql.connector.Error as err:
+    except psycopg2.Error as err:
 
         if connection:
             connection.rollback()
 
         raise HTTPException(
             status_code=500,
-            detail=err.msg
+            detail=str(err).strip()
         )
 
     finally:

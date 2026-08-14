@@ -1,4 +1,5 @@
-import mysql.connector
+import psycopg2
+from psycopg2 import errorcodes
 
 from fastapi import APIRouter, HTTPException
 from app.schemas.granite import GraniteCreate
@@ -36,12 +37,12 @@ def add_granite(granite: GraniteCreate):
             "message": "Granite added successfully!"
         }
 
-    except mysql.connector.Error as err:
+    except psycopg2.Error as err:
 
         if connection:
             connection.rollback()
 
-        if err.errno == 1062:
+        if err.pgcode == errorcodes.UNIQUE_VIOLATION:
             raise HTTPException(
                 status_code=409,
                 detail="Granite already exists."
@@ -49,7 +50,7 @@ def add_granite(granite: GraniteCreate):
 
         raise HTTPException(
             status_code=500,
-            detail=err.msg
+            detail=str(err).strip()
         )
 
     finally:
@@ -135,12 +136,12 @@ def update_granite(
             "message": "Granite updated successfully!"
         }
 
-    except mysql.connector.Error as err:
+    except psycopg2.Error as err:
 
         if connection:
             connection.rollback()
 
-        if err.errno == 1062:
+        if err.pgcode == errorcodes.UNIQUE_VIOLATION:
             raise HTTPException(
                 status_code=409,
                 detail="Granite already exists."
@@ -148,7 +149,7 @@ def update_granite(
 
         raise HTTPException(
             status_code=500,
-            detail=err.msg
+            detail=str(err).strip()
         )
 
     finally:
@@ -196,14 +197,14 @@ def delete_granite(granite_id: int):
             "message": "Granite deactivated successfully!"
         }
 
-    except mysql.connector.Error as err:
+    except psycopg2.Error as err:
 
         if connection:
             connection.rollback()
 
         raise HTTPException(
             status_code=500,
-            detail=err.msg
+            detail=str(err).strip()
         )
 
     finally:

@@ -1,4 +1,4 @@
-import mysql.connector
+import psycopg2
 from datetime import date, timedelta
 from decimal import Decimal
 
@@ -47,7 +47,7 @@ def get_dashboard_summary(
                 COALESCE(SUM(si.sqft_sold * si.negotiated_rate_per_sqft), 0) AS todays_sales_total
             FROM Sale s
             INNER JOIN Sale_Item si ON s.sale_id = si.sale_id
-            WHERE s.sale_date = CURDATE()
+            WHERE s.sale_date = CURRENT_DATE
             """
         )
 
@@ -63,7 +63,7 @@ def get_dashboard_summary(
                 COALESCE(SUM(CASE WHEN payment_method = 'CASH' THEN amount ELSE 0 END), 0) AS cash_collected_today,
                 COALESCE(SUM(CASE WHEN payment_method IN ('UPI', 'BANK_TRANSFER') THEN amount ELSE 0 END), 0) AS online_payments_today
             FROM Payment
-            WHERE payment_date = CURDATE()
+            WHERE payment_date = CURRENT_DATE
             """
         )
 
@@ -80,7 +80,7 @@ def get_dashboard_summary(
                 COALESCE(SUM(CASE WHEN refund_method = 'CASH' THEN amount ELSE 0 END), 0) AS cash_refunded_today,
                 COALESCE(SUM(CASE WHEN refund_method IN ('UPI', 'BANK_TRANSFER') THEN amount ELSE 0 END), 0) AS online_refunded_today
             FROM Refund
-            WHERE refund_date = CURDATE()
+            WHERE refund_date = CURRENT_DATE
             """
         )
 
@@ -110,7 +110,7 @@ def get_dashboard_summary(
                 SELECT si.sale_id, SUM(si.sqft_sold * si.negotiated_rate_per_sqft) AS grand_total
                 FROM Sale_Item si
                 INNER JOIN Sale s ON si.sale_id = s.sale_id
-                WHERE s.sale_date = CURDATE()
+                WHERE s.sale_date = CURRENT_DATE
                 GROUP BY si.sale_id
             ) sale_totals
             LEFT JOIN (
@@ -225,11 +225,11 @@ def get_dashboard_summary(
                 SELECT
                     g.granite_name,
                     (l.total_sqft - l.available_sqft) AS sqft_sold,
-                    GREATEST(DATEDIFF(CURDATE(), l.purchase_date), 1) AS days_since_purchase
+                    GREATEST((CURRENT_DATE - l.purchase_date), 1) AS days_since_purchase
                 FROM Lot l
                 INNER JOIN Granite g ON l.granite_id = g.granite_id
                 WHERE l.is_active = TRUE AND g.is_active = TRUE
-                    AND DATEDIFF(CURDATE(), l.purchase_date) >= %s
+                    AND (CURRENT_DATE - l.purchase_date) >= %s
             ) lot_velocity
             GROUP BY granite_name
             ORDER BY avg_sqft_per_day DESC
@@ -273,17 +273,17 @@ def get_dashboard_summary(
             """
             SELECT
                 COALESCE(SUM(
-                    CASE WHEN s.sale_date >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+                    CASE WHEN s.sale_date >= (CURRENT_DATE - INTERVAL '6 days')
                     THEN si.sqft_sold * si.negotiated_rate_per_sqft ELSE 0 END
                 ), 0) AS last_7_days_total,
                 COALESCE(SUM(
-                    CASE WHEN s.sale_date >= DATE_SUB(CURDATE(), INTERVAL 13 DAY)
-                        AND s.sale_date < DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+                    CASE WHEN s.sale_date >= (CURRENT_DATE - INTERVAL '13 days')
+                        AND s.sale_date < (CURRENT_DATE - INTERVAL '6 days')
                     THEN si.sqft_sold * si.negotiated_rate_per_sqft ELSE 0 END
                 ), 0) AS prior_7_days_total
             FROM Sale s
             INNER JOIN Sale_Item si ON s.sale_id = si.sale_id
-            WHERE s.sale_date >= DATE_SUB(CURDATE(), INTERVAL 13 DAY)
+            WHERE s.sale_date >= (CURRENT_DATE - INTERVAL '13 days')
             """
         )
 
@@ -311,11 +311,11 @@ def get_dashboard_summary(
         cursor.execute(
             """
             SELECT
-                DATE_FORMAT(s.sale_date, '%%Y-%%m') AS month,
+                TO_CHAR(s.sale_date, 'YYYY-MM') AS month,
                 COALESCE(SUM(si.sqft_sold * si.negotiated_rate_per_sqft), 0) AS total_sales
             FROM Sale s
             INNER JOIN Sale_Item si ON s.sale_id = si.sale_id
-            WHERE s.sale_date >= DATE_SUB(CURDATE(), INTERVAL %s MONTH)
+            WHERE s.sale_date >= (CURRENT_DATE - (%s * INTERVAL '1 month'))
             GROUP BY month
             ORDER BY month
             """,
@@ -353,7 +353,7 @@ def get_dashboard_summary(
                 payment_method,
                 COALESCE(SUM(amount), 0) AS total
             FROM Payment
-            WHERE payment_date >= DATE_SUB(CURDATE(), INTERVAL %s DAY)
+            WHERE payment_date >= (CURRENT_DATE - (%s * INTERVAL '1 day'))
             GROUP BY payment_method
             """,
             (PAYMENT_BREAKDOWN_DAYS,)
@@ -403,9 +403,9 @@ def get_dashboard_summary(
             "top_granites_by_revenue": top_granites_by_revenue
         }
 
-    except mysql.connector.Error as err:
+    except psycopg2.Error as err:
 
-        raise HTTPException(status_code=500, detail=err.msg)
+        raise HTTPException(status_code=500, detail=str(err).strip())
 
     finally:
 

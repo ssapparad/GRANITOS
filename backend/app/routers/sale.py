@@ -1,4 +1,5 @@
-import mysql.connector
+import psycopg2
+from psycopg2 import errorcodes
 from datetime import date
 from typing import Optional
 
@@ -119,6 +120,7 @@ def create_sale(sale: SaleCreate):
             INSERT INTO Sale
             (invoice_no, customer_id, sale_date, remarks, commission, loading_charge)
             VALUES (%s, %s, %s, %s, %s, %s)
+            RETURNING sale_id
             """,
             (
                 sale.invoice_no,
@@ -130,7 +132,7 @@ def create_sale(sale: SaleCreate):
             )
         )
 
-        sale_id = cursor.lastrowid
+        sale_id = cursor.fetchone()["sale_id"]
 
         for item in sale.items:
 
@@ -180,12 +182,12 @@ def create_sale(sale: SaleCreate):
 
         return cursor.fetchone()
 
-    except mysql.connector.Error as err:
+    except psycopg2.Error as err:
 
         if connection:
             connection.rollback()
 
-        if err.errno == 1062:
+        if err.pgcode == errorcodes.UNIQUE_VIOLATION:
             raise HTTPException(
                 status_code=409,
                 detail="Invoice number already exists."
@@ -193,7 +195,7 @@ def create_sale(sale: SaleCreate):
 
         raise HTTPException(
             status_code=500,
-            detail=err.msg
+            detail=str(err).strip()
         )
 
     finally:
@@ -240,9 +242,9 @@ def get_sales():
 
         return cursor.fetchall()
 
-    except mysql.connector.Error as err:
+    except psycopg2.Error as err:
 
-        raise HTTPException(status_code=500, detail=err.msg)
+        raise HTTPException(status_code=500, detail=str(err).strip())
 
     finally:
 
@@ -326,9 +328,9 @@ def get_sale_detail(sale_id: int):
             "items": items
         }
 
-    except mysql.connector.Error as err:
+    except psycopg2.Error as err:
 
-        raise HTTPException(status_code=500, detail=err.msg)
+        raise HTTPException(status_code=500, detail=str(err).strip())
 
     finally:
 
@@ -387,12 +389,12 @@ def pay_loading_charges(payment_date: Optional[date] = None):
             "payment_date": payment_date
         }
 
-    except mysql.connector.Error as err:
+    except psycopg2.Error as err:
 
         if connection:
             connection.rollback()
 
-        raise HTTPException(status_code=500, detail=err.msg)
+        raise HTTPException(status_code=500, detail=str(err).strip())
 
     finally:
 

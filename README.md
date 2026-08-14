@@ -5,16 +5,15 @@ types, purchased lots, customer sales, payments, and reporting.
 
 ## Tech Stack
 
-- **Backend**: FastAPI + `mysql-connector-python`
-- **Database**: MySQL
+- **Backend**: FastAPI + `psycopg2`
+- **Database**: PostgreSQL
 - **Frontend**: React + Vite + Tailwind CSS
 
 ## Prerequisites
 
 - Python 3.10+
 - Node.js 18+
-- MySQL 8.0+ (needed for the `CASE`/window-style aggregate queries used in dashboard
-  and report endpoints)
+- PostgreSQL 13+
 
 ## Backend Setup
 
@@ -26,10 +25,12 @@ pip install -r requirements.txt
 cp .env.example .env           # then edit .env with your DB credentials
 ```
 
-Initialize the database:
+Initialize the database (create the database itself first — Postgres has no
+`CREATE DATABASE IF NOT EXISTS`, so e.g. `createdb granitos` locally, or use
+whatever database your hosted provider already created for you):
 
 ```bash
-mysql -u root -p < ../database/schema.sql
+psql -U postgres -d granitos -f ../database/schema.sql
 ```
 
 Run the dev server:
@@ -58,10 +59,13 @@ The app will be available at `http://localhost:5173`.
 
 | Variable | Description | Default |
 |---|---|---|
-| `DB_HOST` | MySQL host | `localhost` |
-| `DB_USER` | MySQL user | `root` |
-| `DB_PASSWORD` | MySQL password | *(empty)* |
-| `DB_NAME` | Database name | `granitos` |
+| `DATABASE_URL` | Full Postgres connection string (preferred — used by hosted providers like Neon/Supabase). Takes priority over the `DB_*` vars below if set. | *(unset)* |
+| `DB_HOST` | Postgres host (fallback, local dev only) | `localhost` |
+| `DB_PORT` | Postgres port (fallback) | `5432` |
+| `DB_USER` | Postgres user (fallback) | `postgres` |
+| `DB_PASSWORD` | Postgres password (fallback) | *(empty)* |
+| `DB_NAME` | Database name (fallback) | `granitos` |
+| `DB_SSLMODE` | SSL mode for the fallback connection | `prefer` |
 | `CORS_ORIGINS` | Comma-separated list of allowed frontend origins | `http://localhost:5173` |
 | `LOG_LEVEL` | Python logging level (`DEBUG`/`INFO`/`WARNING`/`ERROR`) | `INFO` |
 
@@ -73,9 +77,12 @@ The app will be available at `http://localhost:5173`.
 
 ## Deployment Notes
 
-- **Database**: run `database/schema.sql` against your production MySQL instance
-  once. It's idempotent (`CREATE TABLE IF NOT EXISTS`, `INSERT IGNORE`), so re-running
-  it is safe.
+For a step-by-step guide (recommended free-forever managed-hosting path, plus a
+self-hosted VPS alternative), see [`DEPLOYMENT.md`](./DEPLOYMENT.md).
+
+- **Database**: run `database/schema.sql` against your production Postgres instance
+  once. It's idempotent (`CREATE TABLE IF NOT EXISTS`, `ON CONFLICT DO NOTHING`), so
+  re-running it is safe.
 - **CORS**: set `CORS_ORIGINS` to include your production frontend URL, e.g.
   `CORS_ORIGINS=https://granitos.yourdomain.com`. You can list multiple origins
   comma-separated if you need both a staging and production frontend.
@@ -84,7 +91,9 @@ The app will be available at `http://localhost:5173`.
 ```bash
   uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
 ```
-  Put it behind a reverse proxy (Nginx/Caddy) that terminates TLS.
+  Put it behind a reverse proxy (Nginx/Caddy) that terminates TLS — or, on a
+  managed platform, let the platform terminate TLS for you and just bind to
+  the `$PORT` it gives you (see `backend/Procfile`).
 - **Frontend build**: `npm run build` produces static files in `frontend/dist/` —
   serve these from your reverse proxy or a static host.
 - **Logging**: unhandled backend errors are logged (via Python's `logging` module,
