@@ -127,6 +127,8 @@ class DashboardSummaryResponse(BaseModel):
 
     total_outstanding: Decimal
     outstanding_sales_count: int
+    outstanding_commission: Decimal
+    outstanding_loading: Decimal
 
     low_stock_lots: List[DashboardLowStockLot]
 

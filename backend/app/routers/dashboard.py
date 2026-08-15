@@ -86,8 +86,39 @@ def get_dashboard_summary(
 
         refunds_today = cursor.fetchone()
 
-        cash_collected_today = payments_today["cash_collected_today"] - refunds_today["cash_refunded_today"]
-        online_payments_today = payments_today["online_payments_today"] - refunds_today["online_refunded_today"]
+        # ==========================================
+        # COMMISSION / LOADING PAID OUT TODAY
+        # (also netted out of cash/online collected —
+        # this is money paid to agents/labour, same
+        # till as customer payments)
+        # ==========================================
+
+        cursor.execute(
+            """
+            SELECT
+                COALESCE(SUM(CASE WHEN commission_paid_date = CURRENT_DATE AND commission_paid_method = 'CASH' THEN commission ELSE 0 END), 0)
+                    + COALESCE(SUM(CASE WHEN loading_paid_date = CURRENT_DATE AND loading_paid_method = 'CASH' THEN loading_charge ELSE 0 END), 0)
+                    AS cash_paid_out_today,
+                COALESCE(SUM(CASE WHEN commission_paid_date = CURRENT_DATE AND commission_paid_method IN ('UPI', 'BANK_TRANSFER') THEN commission ELSE 0 END), 0)
+                    + COALESCE(SUM(CASE WHEN loading_paid_date = CURRENT_DATE AND loading_paid_method IN ('UPI', 'BANK_TRANSFER') THEN loading_charge ELSE 0 END), 0)
+                    AS online_paid_out_today
+            FROM Sale
+            WHERE commission_paid_date = CURRENT_DATE OR loading_paid_date = CURRENT_DATE
+            """
+        )
+
+        payouts_today = cursor.fetchone()
+
+        cash_collected_today = (
+            payments_today["cash_collected_today"]
+            - refunds_today["cash_refunded_today"]
+            - payouts_today["cash_paid_out_today"]
+        )
+        online_payments_today = (
+            payments_today["online_payments_today"]
+            - refunds_today["online_refunded_today"]
+            - payouts_today["online_paid_out_today"]
+        )
 
         # ==========================================
         # CREDIT SALES TODAY (net of returns)
@@ -193,6 +224,25 @@ def get_dashboard_summary(
         )
 
         outstanding = cursor.fetchone()
+
+        # ==========================================
+        # OWED TO AGENTS / LABOUR (unpaid commission +
+        # loading charges). This is money YOU pay OUT —
+        # the opposite direction from customer Outstanding
+        # Dues above, so it's kept as its own total rather
+        # than merged in.
+        # ==========================================
+
+        cursor.execute(
+            """
+            SELECT
+                COALESCE(SUM(CASE WHEN commission IS NOT NULL AND commission_paid = FALSE THEN commission ELSE 0 END), 0) AS outstanding_commission,
+                COALESCE(SUM(CASE WHEN loading_charge IS NOT NULL AND loading_paid = FALSE THEN loading_charge ELSE 0 END), 0) AS outstanding_loading
+            FROM Sale
+            """
+        )
+
+        payables = cursor.fetchone()
 
         # ==========================================
         # LOW STOCK LOTS
@@ -393,6 +443,8 @@ def get_dashboard_summary(
             "total_inventory_slabs": inventory["total_inventory_slabs"],
             "total_outstanding": outstanding["total_outstanding"],
             "outstanding_sales_count": outstanding["outstanding_sales_count"],
+            "outstanding_commission": payables["outstanding_commission"],
+            "outstanding_loading": payables["outstanding_loading"],
             "low_stock_lots": low_stock_lots,
             "fast_moving_granites": fast_moving_granites,
             "slow_moving_granites": slow_moving_granites,

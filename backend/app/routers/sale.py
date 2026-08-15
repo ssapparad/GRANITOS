@@ -1,7 +1,8 @@
 import psycopg2
 from psycopg2 import errorcodes
 from datetime import date
-from typing import Optional
+from decimal import Decimal
+from typing import Literal, Optional
 
 from fastapi import APIRouter, HTTPException
 
@@ -11,7 +12,9 @@ from app.schemas.sale import (
     SaleSummaryResponse,
     SaleListResponse,
     SaleDetailResponse,
-    SaleDetailItem
+    SaleDetailItem,
+    PayoutCreate,
+    PayablesResponse
 )
 
 
@@ -256,6 +259,74 @@ def get_sales():
 
 
 # ==========================================
+# PAYABLES — unpaid commission + loading
+# across all sales. This is money YOU owe OUT
+# (to agents/labour) — kept separate from
+# customer Outstanding Dues, which is the
+# opposite direction of money.
+#
+# Registered before GET /{sale_id} below —
+# otherwise "/payables/" would be swallowed by
+# the generic sale_id route and 422 instead.
+# ==========================================
+
+@router.get("/payables/", response_model=PayablesResponse)
+def get_payables():
+
+    connection = None
+    cursor = None
+
+    try:
+
+        connection = get_connection()
+        cursor = connection.cursor(dictionary=True)
+
+        cursor.execute(
+            """
+            SELECT
+                s.sale_id, s.invoice_no, c.customer_name, s.sale_date,
+                s.commission, s.commission_paid,
+                s.loading_charge, s.loading_paid
+            FROM Sale s
+            INNER JOIN Customer c ON s.customer_id = c.customer_id
+            WHERE
+                (s.commission IS NOT NULL AND s.commission > 0 AND s.commission_paid = FALSE)
+                OR (s.loading_charge IS NOT NULL AND s.loading_charge > 0 AND s.loading_paid = FALSE)
+            ORDER BY s.sale_date, s.sale_id
+            """
+        )
+
+        sales = cursor.fetchall()
+
+        total_unpaid_commission = sum(
+            (row["commission"] for row in sales if row["commission"] is not None and not row["commission_paid"]),
+            Decimal("0")
+        )
+        total_unpaid_loading = sum(
+            (row["loading_charge"] for row in sales if row["loading_charge"] is not None and not row["loading_paid"]),
+            Decimal("0")
+        )
+
+        return {
+            "total_unpaid_commission": total_unpaid_commission,
+            "total_unpaid_loading": total_unpaid_loading,
+            "sales": sales
+        }
+
+    except psycopg2.Error as err:
+
+        raise HTTPException(status_code=500, detail=str(err).strip())
+
+    finally:
+
+        if cursor:
+            cursor.close()
+
+        if connection:
+            connection.close()
+
+
+# ==========================================
 # GET SALE DETAIL (INVOICE VIEW)
 # ==========================================
 
@@ -277,7 +348,8 @@ def get_sale_detail(sale_id: int):
             """
             SELECT
                 s.sale_id, s.invoice_no, c.customer_name, s.sale_date, s.remarks,
-                s.commission, s.loading_charge, s.loading_paid, s.loading_paid_date
+                s.commission, s.commission_paid, s.commission_paid_date, s.commission_paid_method,
+                s.loading_charge, s.loading_paid, s.loading_paid_date, s.loading_paid_method
             FROM Sale s
             INNER JOIN Customer c ON s.customer_id = c.customer_id
             WHERE s.sale_id = %s
@@ -318,9 +390,13 @@ def get_sale_detail(sale_id: int):
             "sale_date": sale["sale_date"],
             "remarks": sale["remarks"],
             "commission": sale["commission"],
+            "commission_paid": sale["commission_paid"],
+            "commission_paid_date": sale["commission_paid_date"],
+            "commission_paid_method": sale["commission_paid_method"],
             "loading_charge": sale["loading_charge"],
             "loading_paid": sale["loading_paid"],
             "loading_paid_date": sale["loading_paid_date"],
+            "loading_paid_method": sale["loading_paid_method"],
             "total_line_items": len(items),
             "total_slabs": total_slabs,
             "total_sqft": total_sqft,
@@ -344,11 +420,16 @@ def get_sale_detail(sale_id: int):
 # ==========================================
 # PAY LOADING CHARGES (weekly batch action)
 # Marks every currently-unpaid loading charge
-# as paid as of the given date.
+# as paid as of the given date. This is money
+# YOU pay OUT to loading labour — not something
+# the customer owes.
 # ==========================================
 
 @router.post("/loading-charges/pay")
-def pay_loading_charges(payment_date: Optional[date] = None):
+def pay_loading_charges(
+    payment_date: Optional[date] = None,
+    payment_method: Literal["CASH", "UPI", "BANK_TRANSFER"] = "CASH"
+):
 
     if payment_date is None:
         payment_date = date.today()
@@ -374,10 +455,10 @@ def pay_loading_charges(payment_date: Optional[date] = None):
         cursor.execute(
             """
             UPDATE Sale
-            SET loading_paid = TRUE, loading_paid_date = %s
+            SET loading_paid = TRUE, loading_paid_date = %s, loading_paid_method = %s
             WHERE loading_paid = FALSE AND loading_charge IS NOT NULL AND loading_charge > 0
             """,
-            (payment_date,)
+            (payment_date, payment_method)
         )
 
         connection.commit()
@@ -386,7 +467,145 @@ def pay_loading_charges(payment_date: Optional[date] = None):
             "message": f'Marked {summary["sales_count"]} sale(s) as paid.',
             "sales_count": summary["sales_count"],
             "total_amount": summary["total_amount"],
-            "payment_date": payment_date
+            "payment_date": payment_date,
+            "payment_method": payment_method
+        }
+
+    except psycopg2.Error as err:
+
+        if connection:
+            connection.rollback()
+
+        raise HTTPException(status_code=500, detail=str(err).strip())
+
+    finally:
+
+        if cursor:
+            cursor.close()
+
+        if connection:
+            connection.close()
+
+
+# ==========================================
+# PAY COMMISSION (per sale)
+# Money YOU pay OUT to the agent/broker who
+# brought this sale — not something the
+# customer owes.
+# ==========================================
+
+@router.post("/{sale_id}/commission/pay")
+def pay_commission(sale_id: int, payout: PayoutCreate):
+
+    connection = None
+    cursor = None
+
+    try:
+
+        connection = get_connection()
+        cursor = connection.cursor(dictionary=True)
+
+        cursor.execute(
+            "SELECT commission, commission_paid FROM Sale WHERE sale_id = %s",
+            (sale_id,)
+        )
+
+        sale = cursor.fetchone()
+
+        if sale is None:
+            raise HTTPException(status_code=404, detail="Sale not found.")
+
+        if sale["commission"] is None or sale["commission"] <= 0:
+            raise HTTPException(status_code=400, detail="This sale has no commission to pay.")
+
+        if sale["commission_paid"]:
+            raise HTTPException(status_code=400, detail="Commission on this sale is already marked paid.")
+
+        cursor.execute(
+            """
+            UPDATE Sale
+            SET commission_paid = TRUE, commission_paid_date = %s, commission_paid_method = %s
+            WHERE sale_id = %s
+            """,
+            (payout.payment_date, payout.payment_method, sale_id)
+        )
+
+        connection.commit()
+
+        return {
+            "message": "Commission marked as paid.",
+            "sale_id": sale_id,
+            "amount": sale["commission"],
+            "payment_date": payout.payment_date,
+            "payment_method": payout.payment_method
+        }
+
+    except psycopg2.Error as err:
+
+        if connection:
+            connection.rollback()
+
+        raise HTTPException(status_code=500, detail=str(err).strip())
+
+    finally:
+
+        if cursor:
+            cursor.close()
+
+        if connection:
+            connection.close()
+
+
+# ==========================================
+# PAY LOADING (per sale)
+# Same idea as the batch action above, but for
+# a single invoice.
+# ==========================================
+
+@router.post("/{sale_id}/loading/pay")
+def pay_loading_single(sale_id: int, payout: PayoutCreate):
+
+    connection = None
+    cursor = None
+
+    try:
+
+        connection = get_connection()
+        cursor = connection.cursor(dictionary=True)
+
+        cursor.execute(
+            "SELECT loading_charge, loading_paid FROM Sale WHERE sale_id = %s",
+            (sale_id,)
+        )
+
+        sale = cursor.fetchone()
+
+        if sale is None:
+            raise HTTPException(status_code=404, detail="Sale not found.")
+
+        if sale["loading_charge"] is None or sale["loading_charge"] <= 0:
+            raise HTTPException(status_code=400, detail="This sale has no loading charge to pay.")
+
+        if sale["loading_paid"]:
+            raise HTTPException(status_code=400, detail="Loading charge on this sale is already marked paid.")
+
+        cursor.execute(
+            """
+            UPDATE Sale
+            SET loading_paid = TRUE, loading_paid_date = %s, loading_paid_method = %s
+            WHERE sale_id = %s
+            """,
+            (payout.payment_date, payout.payment_method, sale_id)
+        )
+
+        connection.commit()
+
+        return {
+            "message": "Loading charge marked as paid.",
+            "sale_id": sale_id,
+            "amount": sale["loading_charge"],
+            "payment_date": payout.payment_date,
+            "payment_method": payout.payment_method
         }
 
     except psycopg2.Error as err:

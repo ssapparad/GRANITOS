@@ -11,6 +11,7 @@ import {
   PlusCircle,
   Boxes,
   Users,
+  Truck,
   BarChart3,
   ArrowUpRight,
   ArrowDownRight
@@ -231,6 +232,33 @@ export default function Dashboard() {
           value={summary.outstanding_sales_count}
         />
       </div>
+
+      {(Number(summary.outstanding_commission) > 0 || Number(summary.outstanding_loading) > 0) && (
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-ink">Owed to Agents / Labour</h3>
+            <Link to="/reports" className="text-xs text-emerald-700 hover:underline font-medium">
+              View & pay →
+            </Link>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <KpiCard
+              icon={Users}
+              iconTone="violet"
+              label="Unpaid Commission"
+              value={formatINR(summary.outstanding_commission)}
+              sublabel="Owed to agents/brokers"
+            />
+            <KpiCard
+              icon={Truck}
+              iconTone="amber"
+              label="Unpaid Loading"
+              value={formatINR(summary.outstanding_loading)}
+              sublabel="Owed to loading labour"
+            />
+          </div>
+        </div>
+      )}
 
       {/* Charts row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-8">

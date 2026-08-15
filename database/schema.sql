@@ -62,9 +62,13 @@ CREATE TABLE IF NOT EXISTS Sale (
     sale_date DATE NOT NULL,
     remarks VARCHAR(255),
     commission DECIMAL(10,2) NULL,
+    commission_paid BOOLEAN NOT NULL DEFAULT FALSE,
+    commission_paid_date DATE NULL,
+    commission_paid_method VARCHAR(20) NULL CHECK (commission_paid_method IS NULL OR commission_paid_method IN ('CASH', 'UPI', 'BANK_TRANSFER')),
     loading_charge DECIMAL(10,2) NULL,
     loading_paid BOOLEAN NOT NULL DEFAULT FALSE,
     loading_paid_date DATE NULL,
+    loading_paid_method VARCHAR(20) NULL CHECK (loading_paid_method IS NULL OR loading_paid_method IN ('CASH', 'UPI', 'BANK_TRANSFER')),
     FOREIGN KEY (customer_id) REFERENCES Customer(customer_id)
 );
 

@@ -33,6 +33,13 @@ export default function SaleDetail() {
   })
   const [returnError, setReturnError] = useState('')
 
+  const [activePayoutType, setActivePayoutType] = useState(null) // 'commission' | 'loading' | null
+  const [payoutForm, setPayoutForm] = useState({
+    payment_date: new Date().toISOString().slice(0, 10),
+    payment_method: 'CASH'
+  })
+  const [payoutError, setPayoutError] = useState('')
+
   async function loadAll() {
     const [saleRes, balanceRes, returnsRes] = await Promise.all([
       client.get(`/sales/${saleId}`),
@@ -106,6 +113,33 @@ export default function SaleDetail() {
     }
   }
 
+  function openPayoutForm(type) {
+    setActivePayoutType(type)
+    setPayoutForm({
+      payment_date: new Date().toISOString().slice(0, 10),
+      payment_method: 'CASH'
+    })
+    setPayoutError('')
+  }
+
+  function updatePayoutField(field, value) {
+    setPayoutForm((prev) => ({ ...prev, [field]: value }))
+  }
+
+  async function handleSubmitPayout(e) {
+    e.preventDefault()
+    setPayoutError('')
+
+    try {
+      await client.post(`/sales/${saleId}/${activePayoutType}/pay`, payoutForm)
+      showToast(activePayoutType === 'commission' ? 'Commission marked as paid.' : 'Loading charge marked as paid.')
+      setActivePayoutType(null)
+      loadAll()
+    } catch (err) {
+      setPayoutError(err.response?.data?.detail || 'Something went wrong.')
+    }
+  }
+
   if (error) {
     return <p className="text-red-600 text-sm">{error}</p>
   }
@@ -127,13 +161,6 @@ export default function SaleDetail() {
           <div className="min-w-0">
             <h2 className="text-xl font-semibold text-ink">{sale.invoice_no}</h2>
             <p className="text-sm text-ink-muted mt-1">{sale.customer_name} · {sale.sale_date}</p>
-            {(sale.commission || sale.loading_charge) && (
-              <p className="text-xs text-ink-faint mt-1">
-                {sale.commission ? `Commission: ₹${sale.commission}` : ''}
-                {sale.commission && sale.loading_charge ? ' · ' : ''}
-                {sale.loading_charge ? `Loading: ₹${sale.loading_charge} (${sale.loading_paid ? 'Paid' : 'Unpaid'})` : ''}
-              </p>
-            )}
           </div>
           <div className="sm:text-right">
             <p className="text-2xl font-semibold text-ink">₹{sale.grand_total}</p>
@@ -273,6 +300,94 @@ export default function SaleDetail() {
 
           {paymentError && <p className="text-red-600 text-sm mt-2">{paymentError}</p>}
         </div>
+
+        {(sale.commission || sale.loading_charge) && (
+          <div className="border-t border-line pt-6 mb-8">
+            <h3 className="text-sm font-semibold text-ink mb-1">Payouts</h3>
+            <p className="text-xs text-ink-faint mb-4">Money you pay out — to the agent who brought this sale, and to loading labour. Kept separate from customer dues.</p>
+
+            <div className="space-y-2 mb-4">
+              {sale.commission && (
+                <div className="flex items-center justify-between bg-canvas rounded-xl p-3 text-sm">
+                  <div>
+                    <p className="text-ink font-medium">Commission — ₹{sale.commission}</p>
+                    <p className="text-ink-faint text-xs mt-0.5">
+                      {sale.commission_paid
+                        ? `Paid ${sale.commission_paid_date} via ${sale.commission_paid_method?.replace('_', ' ')}`
+                        : 'Unpaid'}
+                    </p>
+                  </div>
+                  {!sale.commission_paid && (
+                    <button
+                      onClick={() => openPayoutForm('commission')}
+                      className="text-emerald-700 hover:underline font-medium shrink-0"
+                    >
+                      Pay Commission
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {sale.loading_charge && (
+                <div className="flex items-center justify-between bg-canvas rounded-xl p-3 text-sm">
+                  <div>
+                    <p className="text-ink font-medium">Loading — ₹{sale.loading_charge}</p>
+                    <p className="text-ink-faint text-xs mt-0.5">
+                      {sale.loading_paid
+                        ? `Paid ${sale.loading_paid_date} via ${sale.loading_paid_method?.replace('_', ' ')}`
+                        : 'Unpaid'}
+                    </p>
+                  </div>
+                  {!sale.loading_paid && (
+                    <button
+                      onClick={() => openPayoutForm('loading')}
+                      className="text-emerald-700 hover:underline font-medium shrink-0"
+                    >
+                      Pay Loading
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {activePayoutType && (
+              <form onSubmit={handleSubmitPayout} className="bg-canvas border border-line rounded-xl p-4 space-y-2">
+                <h4 className="text-sm font-medium text-ink">
+                  Pay {activePayoutType === 'commission' ? 'Commission' : 'Loading Charge'}
+                </h4>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <input
+                    type="date"
+                    value={payoutForm.payment_date}
+                    onChange={(e) => updatePayoutField('payment_date', e.target.value)}
+                    required
+                    className={`bg-white ${inputClass}`}
+                  />
+                  <select
+                    value={payoutForm.payment_method}
+                    onChange={(e) => updatePayoutField('payment_method', e.target.value)}
+                    className={`bg-white ${inputClass}`}
+                  >
+                    {paymentMethods.map((m) => (
+                      <option key={m} value={m}>{m.replace('_', ' ')}</option>
+                    ))}
+                  </select>
+                  <Button type="submit">
+                    Confirm
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => setActivePayoutType(null)}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+                {payoutError && <p className="text-red-600 text-sm">{payoutError}</p>}
+              </form>
+            )}
+          </div>
+        )}
 
         <div className="border-t border-line pt-6">
           <div className="flex items-center justify-between mb-4">

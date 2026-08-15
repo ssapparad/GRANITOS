@@ -543,6 +543,57 @@ def get_day_closing_report(
 
         loading_unpaid_total = cursor.fetchone()["unpaid_total"]
 
+        # ==========================================
+        # COMMISSION: PAID TODAY / UNPAID TOTAL
+        # (mirrors Loading above — this is money YOU
+        # pay OUT to the agent who brought the sale)
+        # ==========================================
+
+        cursor.execute(
+            """
+            SELECT COALESCE(SUM(commission), 0) AS paid_today
+            FROM Sale
+            WHERE commission_paid = TRUE AND commission_paid_date = %s
+            """,
+            (report_date,)
+        )
+
+        commission_paid_today = cursor.fetchone()["paid_today"]
+
+        cursor.execute(
+            """
+            SELECT COALESCE(SUM(commission), 0) AS unpaid_total
+            FROM Sale
+            WHERE commission_paid = FALSE AND commission IS NOT NULL
+            """
+        )
+
+        commission_unpaid_total = cursor.fetchone()["unpaid_total"]
+
+        # ==========================================
+        # PAYOUTS TODAY (commission + loading combined,
+        # by method) — money that left the till on this
+        # date, separate from what came in. Useful for
+        # reconciling actual cash in hand.
+        # ==========================================
+
+        cursor.execute(
+            """
+            SELECT
+                COALESCE(SUM(CASE WHEN commission_paid_date = %s AND commission_paid_method = 'CASH' THEN commission ELSE 0 END), 0)
+                    + COALESCE(SUM(CASE WHEN loading_paid_date = %s AND loading_paid_method = 'CASH' THEN loading_charge ELSE 0 END), 0)
+                    AS cash,
+                COALESCE(SUM(CASE WHEN commission_paid_date = %s AND commission_paid_method IN ('UPI', 'BANK_TRANSFER') THEN commission ELSE 0 END), 0)
+                    + COALESCE(SUM(CASE WHEN loading_paid_date = %s AND loading_paid_method IN ('UPI', 'BANK_TRANSFER') THEN loading_charge ELSE 0 END), 0)
+                    AS online
+            FROM Sale
+            WHERE commission_paid_date = %s OR loading_paid_date = %s
+            """,
+            (report_date, report_date, report_date, report_date, report_date, report_date)
+        )
+
+        payouts_today = cursor.fetchone()
+
         return {
             "report_date": report_date,
             "sales": sales,
@@ -551,7 +602,12 @@ def get_day_closing_report(
             "loading": {
                 "paid_today": loading_paid_today,
                 "unpaid_total": loading_unpaid_total
-            }
+            },
+            "commission": {
+                "paid_today": commission_paid_today,
+                "unpaid_total": commission_unpaid_total
+            },
+            "payouts_today": payouts_today
         }
 
     except psycopg2.Error as err:

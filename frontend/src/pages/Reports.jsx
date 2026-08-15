@@ -4,7 +4,7 @@ import client from '../api/client.js'
 import { useToast } from '../components/ToastProvider.jsx'
 import PageHeader from '../components/PageHeader.jsx'
 
-const TABS = ['Sales', 'Inventory', 'Customers', 'Outstanding', 'Day Closing']
+const TABS = ['Sales', 'Inventory', 'Customers', 'Outstanding', 'Payables', 'Day Closing']
 
 const inputClass = 'border border-line rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500'
 
@@ -48,6 +48,7 @@ export default function Reports() {
       {activeTab === 'Inventory' && <InventoryReport />}
       {activeTab === 'Customers' && <CustomerReport />}
       {activeTab === 'Outstanding' && <OutstandingReport />}
+      {activeTab === 'Payables' && <PayablesReport />}
       {activeTab === 'Day Closing' && <DayClosingReport />}
     </div>
   )
@@ -282,6 +283,145 @@ function OutstandingReport() {
 }
 
 // ==========================================
+// PAYABLES REPORT (money YOU owe out — to
+// agents/brokers and loading labour. Kept
+// separate from customer Outstanding above,
+// since it's the opposite direction of money)
+// ==========================================
+
+function PayablesReport() {
+  const showToast = useToast()
+  const [data, setData] = useState(null)
+  const [error, setError] = useState('')
+
+  const [activePayout, setActivePayout] = useState(null) // { saleId, type } | null
+  const [payoutForm, setPayoutForm] = useState({ payment_date: todayStr(), payment_method: 'CASH' })
+  const [payoutError, setPayoutError] = useState('')
+
+  function load() {
+    client.get('/sales/payables/').then((res) => setData(res.data)).catch((err) => setError(err.response?.data?.detail || 'Failed to load.'))
+  }
+
+  useEffect(() => {
+    load()
+  }, [])
+
+  function openPayoutForm(saleId, type) {
+    setActivePayout({ saleId, type })
+    setPayoutForm({ payment_date: todayStr(), payment_method: 'CASH' })
+    setPayoutError('')
+  }
+
+  async function handleSubmitPayout(e) {
+    e.preventDefault()
+    setPayoutError('')
+
+    try {
+      await client.post(`/sales/${activePayout.saleId}/${activePayout.type}/pay`, payoutForm)
+      showToast(activePayout.type === 'commission' ? 'Commission marked as paid.' : 'Loading charge marked as paid.')
+      setActivePayout(null)
+      load()
+    } catch (err) {
+      setPayoutError(err.response?.data?.detail || 'Something went wrong.')
+    }
+  }
+
+  if (error) return <p className="text-red-600 text-sm">{error}</p>
+  if (!data) return null
+
+  return (
+    <div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+        <SummaryCard label="Unpaid Commission" value={formatINR(data.total_unpaid_commission)} />
+        <SummaryCard label="Unpaid Loading" value={formatINR(data.total_unpaid_loading)} />
+      </div>
+      <p className="text-xs text-ink-faint mb-4">
+        Money you pay out — to agents/brokers (commission) and loading labour. Kept separate from customer dues.
+      </p>
+
+      <div className="bg-white border border-line rounded-2xl overflow-hidden overflow-x-auto shadow-card mb-4">
+        <table className="w-full text-sm">
+          <thead className="bg-canvas text-ink-muted text-left">
+            <tr>
+              <th className="px-4 py-2.5 font-medium">Invoice #</th>
+              <th className="px-4 py-2.5 font-medium">Customer</th>
+              <th className="px-4 py-2.5 font-medium">Sale Date</th>
+              <th className="px-4 py-2.5 font-medium">Commission</th>
+              <th className="px-4 py-2.5 font-medium">Loading</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.sales.map((s) => (
+              <tr key={s.sale_id} className="border-t border-line-soft hover:bg-canvas/60 transition-colors">
+                <td className="px-4 py-2.5">
+                  <Link to={`/sales/${s.sale_id}`} className="text-ink font-medium hover:text-emerald-700">{s.invoice_no}</Link>
+                </td>
+                <td className="px-4 py-2.5 text-ink-muted">{s.customer_name}</td>
+                <td className="px-4 py-2.5 text-ink-muted">{s.sale_date}</td>
+                <td className="px-4 py-2.5 text-ink-muted">
+                  {s.commission && !s.commission_paid ? (
+                    <div className="flex items-center gap-2">
+                      <span>{formatINR(s.commission)}</span>
+                      <button onClick={() => openPayoutForm(s.sale_id, 'commission')} className="text-emerald-700 hover:underline font-medium text-xs">Pay</button>
+                    </div>
+                  ) : '—'}
+                </td>
+                <td className="px-4 py-2.5 text-ink-muted">
+                  {s.loading_charge && !s.loading_paid ? (
+                    <div className="flex items-center gap-2">
+                      <span>{formatINR(s.loading_charge)}</span>
+                      <button onClick={() => openPayoutForm(s.sale_id, 'loading')} className="text-emerald-700 hover:underline font-medium text-xs">Pay</button>
+                    </div>
+                  ) : '—'}
+                </td>
+              </tr>
+            ))}
+            {data.sales.length === 0 && (
+              <tr><td colSpan={5} className="px-4 py-6 text-center text-ink-faint">Nothing owed out right now.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {activePayout && (
+        <form onSubmit={handleSubmitPayout} className="bg-canvas border border-line rounded-xl p-4 space-y-2 max-w-md">
+          <h4 className="text-sm font-medium text-ink">
+            Pay {activePayout.type === 'commission' ? 'Commission' : 'Loading Charge'}
+          </h4>
+          <div className="grid grid-cols-2 gap-2">
+            <input
+              type="date"
+              value={payoutForm.payment_date}
+              onChange={(e) => setPayoutForm((prev) => ({ ...prev, payment_date: e.target.value }))}
+              required
+              className={`bg-white ${inputClass}`}
+            />
+            <select
+              value={payoutForm.payment_method}
+              onChange={(e) => setPayoutForm((prev) => ({ ...prev, payment_method: e.target.value }))}
+              className={`bg-white ${inputClass}`}
+            >
+              <option value="CASH">CASH</option>
+              <option value="UPI">UPI</option>
+              <option value="BANK_TRANSFER">BANK TRANSFER</option>
+            </select>
+          </div>
+          {payoutError && <p className="text-red-600 text-sm">{payoutError}</p>}
+          <div className="flex gap-2">
+            <button type="submit" className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-emerald-700">
+              Confirm
+            </button>
+            <button type="button" onClick={() => setActivePayout(null)} className="px-4 py-2 rounded-lg text-sm text-ink-muted hover:bg-white">
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
+    </div>
+  )
+}
+
+// ==========================================
 // DAY CLOSING REPORT (mirrors the paper form)
 // ==========================================
 
@@ -443,6 +583,42 @@ function DayClosingReport() {
             <div>
               <p className="text-ink-faint text-xs">Unpaid (owed to labour)</p>
               <p className="font-medium text-amber-700">{data.loading.unpaid_total}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-6">
+        <div className="bg-white border border-line rounded-2xl shadow-card p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-sm font-semibold text-ink">Commission</h4>
+            <Link to="/reports" onClick={() => window.scrollTo(0, 0)} className="text-xs text-emerald-700 hover:underline font-medium">
+              Pay per invoice →
+            </Link>
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-sm">
+            <div>
+              <p className="text-ink-faint text-xs">Paid Today</p>
+              <p className="font-medium text-ink">{data.commission.paid_today}</p>
+            </div>
+            <div>
+              <p className="text-ink-faint text-xs">Unpaid (owed to agents)</p>
+              <p className="font-medium text-amber-700">{data.commission.unpaid_total}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white border border-line rounded-2xl shadow-card p-4">
+          <h4 className="text-sm font-semibold text-ink mb-1">Payouts Today</h4>
+          <p className="text-xs text-ink-faint mb-3">Commission + loading paid out today — subtract this from cash in hand below.</p>
+          <div className="grid grid-cols-2 gap-2 text-sm">
+            <div>
+              <p className="text-ink-faint text-xs">Cash</p>
+              <p className="font-medium text-ink">{data.payouts_today.cash}</p>
+            </div>
+            <div>
+              <p className="text-ink-faint text-xs">Online</p>
+              <p className="font-medium text-ink">{data.payouts_today.online}</p>
             </div>
           </div>
         </div>
